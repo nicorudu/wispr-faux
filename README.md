@@ -3,7 +3,7 @@
 Push-to-talk dictation for macOS: hold a key, speak, release, and the text appears in the focused app.
 The roadmap, architecture and step-by-step plan are in [BUILD_PLAN.md](BUILD_PLAN.md).
 
-**Status:** Step 2 (permissions + hotkey) done. Holding Control is detected in any app and logged, and the menu bar icon fills while it's held. Recording, transcription and pasting come in Steps 3–6.
+**Status:** Step 2 (permissions + hotkey) done. Step 3 (paste spike) is built: *Paste Test String* in the menu pastes into the app in front and then puts the clipboard back. Checking it across the app matrix below is still to do. Recording and transcription come in Steps 4–6.
 
 ## Requirements
 
@@ -18,7 +18,7 @@ project.yml                  XcodeGen spec (source of truth for Dictate.xcodepro
 Dictate/                     App target: menu bar, settings, setup window, DictationController
 Packages/DictationKit/       Core modules, each testable on its own
   HotkeyKit                  CGEventTap, shortcut matching, keycodes  (Step 2, done)
-  InsertionKit               Clipboard backup/restore + Cmd+V         (Step 3)
+  InsertionKit               Clipboard backup/restore + Cmd+V         (Step 3, built)
   AudioKit                   AVAudioEngine → 16 kHz mono              (Step 4)
   TranscriptionKit           Transcriber protocol, WhisperKit engine  (Step 5)
   PostProcessKit             Rule-based transcript cleanup
@@ -78,6 +78,24 @@ log stream --style compact --predicate 'subsystem == "com.example.dictate"'
 ```
 
 Debug builds add a **Debug** menu: *Simulate Event-Tap Timeout on Next Key* stalls the tap for 2.5 s on your next key press so macOS disables it; the log should then show it re-enabled, and the hotkey keeps working.
+
+## Paste test (Step 3)
+
+1. Copy something to check the clipboard survives: some text, or an image (e.g. select all in Preview and press ⌘C).
+2. Click into a text field in the app you're testing.
+3. Menu bar icon → **Paste Test String**. A line like `Dictate paste test 6:20:15 PM · café ✓` should appear.
+4. Open the menu again. It shows how long the paste took and whether the clipboard came back, e.g. *Clipboard restored ✓ (image, 3 types, 1.2 MB)*. Press ⌘V somewhere to confirm.
+
+Check each app: TextEdit, Notes, a Safari textarea, a Chrome textarea, Slack, VS Code, Terminal, Mail.
+
+How it works (`InsertionKit`):
+
+- Every item and type on the clipboard is backed up first. Unlike the teardown, PDF, RTFD and sound data are kept so the clipboard comes back identical; only file promises are skipped.
+- The text goes on the clipboard marked `org.nspasteboard.TransientType`, so clipboard managers don't record it.
+- ⌘V uses the key that types V with ⌘ held in the current layout (Dvorak, AZERTY, Dvorak – QWERTY ⌘), falling back to keycode 9.
+- The clipboard is restored 500 ms later, unless something new was copied in the meantime. A second paste inside that window keeps the original backup.
+
+The log (`log stream` command above) records each paste's timing and backup size. It never records clipboard contents.
 
 ## Signing and permissions
 

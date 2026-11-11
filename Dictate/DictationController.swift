@@ -1,6 +1,7 @@
 import AppKit
 import HistoryKit
 import HotkeyKit
+import InsertionKit
 import Observation
 import os
 
@@ -9,8 +10,9 @@ import os
 ///     idle ─hotkey down─▶ recording ─hotkey up─▶ transcribing ─▶ inserting ─▶ idle
 ///
 /// Step 2 wires in the hotkey and permissions: holding the trigger switches to
-/// `.recording` (the menu bar icon fills in) and every event is logged. Audio (Step 4),
-/// transcription (Step 5) and insertion (Step 3) hook into `handle(_:)` in Step 6.
+/// `.recording` (the menu bar icon fills in) and every event is logged. Step 3 adds the
+/// `inserter`, exercised for now by `pasteTester`. Audio (Step 4), transcription (Step 5)
+/// and insertion hook into `handle(_:)` in Step 6.
 @MainActor
 @Observable
 final class DictationController {
@@ -70,6 +72,11 @@ final class DictationController {
     /// Recent transcripts; backs "Paste Last Transcript".
     let history = HistoryStore(capacity: 100)
 
+    /// Pastes text into the focused app and puts the clipboard back afterwards.
+    let inserter = TextInserter()
+    /// Step 3 spike: "Paste Test String" in the menu.
+    let pasteTester: PasteTester
+
     @ObservationIgnored private let monitor: EventTapMonitor
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
@@ -86,6 +93,7 @@ final class DictationController {
         let triggers = parsed.isEmpty ? HotkeyTrigger.defaultTriggers : parsed
         enabledTriggers = triggers
         monitor = EventTapMonitor(triggers: triggers)
+        pasteTester = PasteTester(inserter: inserter)
     }
 
     // MARK: - Lifecycle
@@ -115,6 +123,8 @@ final class DictationController {
         pollTask?.cancel()
         eventTask?.cancel()
         monitor.stop()
+        // Don't quit with Dictate's text still standing in for the user's clipboard.
+        inserter.restoreNow()
     }
 
     func refreshNow() {

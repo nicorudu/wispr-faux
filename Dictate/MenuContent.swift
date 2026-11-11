@@ -18,6 +18,16 @@ struct MenuContent: View {
         Button("Paste Last Transcript") {}
             .disabled(true)
 
+        // Step 3 spike: click into a text field in any app, then choose this.
+        Button("Paste Test String", action: controller.pasteTester.run)
+            .disabled(controller.pasteTester.isRunning)
+        if let line = controller.pasteTester.lastPaste {
+            Text(line)
+        }
+        if let line = controller.pasteTester.lastRestore {
+            Text(line)
+        }
+
         Button(controller.permissions.allGranted ? "Permissions…" : "Finish Setup…", action: openSetup)
 
         SettingsLink {

@@ -18,7 +18,17 @@ private func keyUp(_ code: CGKeyCode) -> KeyInput {
     KeyInput(kind: .keyUp, keyCode: code)
 }
 
+private let controlFlag = CGEventFlags.maskControl.rawValue
+
+/// Left Control, the only Control key on MacBook keyboards.
+private func control(_ down: Bool) -> KeyInput {
+    KeyInput(kind: .flagsChanged, keyCode: KeyCode.leftControl, flags: down ? controlFlag | 0x1 : 0)
+}
+
+private let mouseDown = KeyInput(kind: .mouseDown, keyCode: 0)
+
 private let letterA: CGKeyCode = 0
+private let letterC: CGKeyCode = 8
 private let delete: CGKeyCode = 51
 
 @Suite("ShortcutMatcher")
@@ -163,6 +173,67 @@ struct ShortcutMatcherTests {
         #expect(matcher.setTriggers([.rightOption]) == [.cancel])
         #expect(matcher.phase == .idle)
         #expect(matcher.setTriggers([.fn]).isEmpty)
+    }
+
+    // MARK: Control (the default)
+
+    @Test func defaultIsEitherControlKey() {
+        #expect(HotkeyTrigger.defaultTriggers == [.leftControl, .rightControl])
+    }
+
+    @Test func controlHoldIsNotSwallowed() {
+        var matcher = ShortcutMatcher(triggers: HotkeyTrigger.defaultTriggers)
+
+        #expect(matcher.handle(control(true)) == .init(swallow: false, events: [.pushToTalkPressed]))
+        #expect(matcher.handle(control(false)) == .init(swallow: false, events: [.pushToTalkReleased]))
+    }
+
+    @Test func rightControlIsToldApartFromLeft() {
+        var leftOnly = ShortcutMatcher(triggers: [.leftControl])
+        let rightDown = KeyInput(kind: .flagsChanged, keyCode: KeyCode.rightControl, flags: controlFlag | 0x2000)
+        #expect(leftOnly.handle(rightDown) == .pass)
+
+        var both = ShortcutMatcher(triggers: HotkeyTrigger.defaultTriggers)
+        #expect(both.handle(rightDown).events == [.pushToTalkPressed])
+    }
+
+    @Test func controlShortcutCancelsAndPassesThrough() {
+        var matcher = ShortcutMatcher(triggers: HotkeyTrigger.defaultTriggers)
+
+        _ = matcher.handle(control(true))
+        #expect(matcher.handle(keyDown(letterC)) == .init(swallow: false, events: [.cancel]))
+        #expect(matcher.handle(keyUp(letterC)) == .pass)
+        #expect(matcher.handle(control(false)) == .init(swallow: false))
+    }
+
+    @Test func controlSpaceLocksHandsFree() {
+        var matcher = ShortcutMatcher(triggers: HotkeyTrigger.defaultTriggers)
+
+        _ = matcher.handle(control(true))
+        #expect(matcher.handle(keyDown(KeyCode.space)) == .init(swallow: true, events: [.handsFreeToggled]))
+        _ = matcher.handle(control(false))
+        #expect(matcher.phase == .handsFree)
+    }
+
+    @Test func ctrlClickCancels() {
+        var matcher = ShortcutMatcher(triggers: HotkeyTrigger.defaultTriggers)
+
+        _ = matcher.handle(control(true))
+        #expect(matcher.handle(mouseDown) == .init(swallow: false, events: [.cancel]))
+        #expect(matcher.handle(control(false)) == .init(swallow: false))
+        #expect(matcher.phase == .idle)
+    }
+
+    @Test func clicksOutsideAHoldAreIgnored() {
+        var matcher = ShortcutMatcher(triggers: HotkeyTrigger.defaultTriggers)
+        #expect(matcher.handle(mouseDown) == .pass)
+
+        _ = matcher.handle(control(true))
+        _ = matcher.handle(keyDown(KeyCode.space))
+        _ = matcher.handle(control(false))
+        // Clicking into a field during hands-free keeps listening.
+        #expect(matcher.handle(mouseDown) == .pass)
+        #expect(matcher.phase == .handsFree)
     }
 
     @Test func staleSwallowedKeyIsForgotten() {

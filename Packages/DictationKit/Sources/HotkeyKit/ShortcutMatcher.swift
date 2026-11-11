@@ -1,12 +1,14 @@
 import CoreGraphics
 
-/// The parts of a keyboard `CGEvent` the matcher needs. A plain value, so the matching
-/// logic can be tested without creating real events.
+/// The parts of a keyboard (or mouse-button) `CGEvent` the matcher needs. A plain value,
+/// so the matching logic can be tested without creating real events.
 public struct KeyInput: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
         case keyDown
         case keyUp
         case flagsChanged
+        /// Any mouse button went down. Only used to spot Ctrl-click; `keyCode` is unused.
+        case mouseDown
     }
 
     public var kind: Kind
@@ -30,8 +32,8 @@ public struct KeyInput: Sendable, Equatable {
 /// - Trigger + Space → `.handsFreeToggled`; recording continues after the trigger is
 ///   released, and the next trigger press ends it with `.pushToTalkReleased`.
 /// - Esc during a session → `.cancel` (Esc is only swallowed while a session is active).
-/// - Any other key while the trigger is held means it's being used as a modifier
-///   (Fn+Delete, ⌥+e…) → `.cancel`, and the key passes through.
+/// - Any other key or a mouse click while the trigger is held means it's being used as
+///   a modifier (⌃C, Ctrl-click, Fn+Delete…) → `.cancel`, and the event passes through.
 ///
 /// Runs inside the event-tap callback, so every call is O(1) and allocation-light.
 public struct ShortcutMatcher: Sendable {
@@ -73,6 +75,7 @@ public struct ShortcutMatcher: Sendable {
         case .flagsChanged: handleFlagsChanged(input)
         case .keyDown: handleKeyDown(input)
         case .keyUp: handleKeyUp(input)
+        case .mouseDown: handleMouseDown()
         }
     }
 
@@ -159,6 +162,14 @@ public struct ShortcutMatcher: Sendable {
             return Decision(swallow: false, events: [.cancel])
         }
         return .pass
+    }
+
+    /// Ctrl-click is right-click on a Mac, so a click during a hold is never dictation.
+    /// Clicks during hands-free are fine (e.g. to focus a text field).
+    private mutating func handleMouseDown() -> Decision {
+        guard phase == .holding else { return .pass }
+        phase = .idle
+        return Decision(swallow: false, events: [.cancel])
     }
 
     private mutating func handleKeyUp(_ input: KeyInput) -> Decision {

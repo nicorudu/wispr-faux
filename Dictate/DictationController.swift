@@ -83,7 +83,7 @@ final class DictationController {
     init() {
         let saved = UserDefaults.standard.stringArray(forKey: Self.triggersDefaultsKey) ?? []
         let parsed = Set(saved.compactMap(HotkeyTrigger.init(rawValue:)))
-        let triggers: Set<HotkeyTrigger> = parsed.isEmpty ? [.fn] : parsed
+        let triggers = parsed.isEmpty ? HotkeyTrigger.defaultTriggers : parsed
         enabledTriggers = triggers
         monitor = EventTapMonitor(triggers: triggers)
     }
@@ -168,12 +168,17 @@ final class DictationController {
         monitor.setTriggers(triggers)
     }
 
-    /// Plain-language name of the enabled triggers, e.g. "Fn (🌐) or Right Option (⌥)".
+    /// Plain-language name of the enabled triggers, e.g. "Control (⌃) or Fn (🌐)".
     var triggerDescription: String {
-        HotkeyTrigger.allCases
+        var names = HotkeyTrigger.allCases
             .filter(enabledTriggers.contains)
             .map(\.displayName)
-            .joined(separator: " or ")
+        if enabledTriggers.isSuperset(of: [.leftControl, .rightControl]) {
+            // "Left Control or Right Control" reads better as one key.
+            names.removeAll { $0 == HotkeyTrigger.rightControl.displayName }
+            names[names.firstIndex(of: HotkeyTrigger.leftControl.displayName)!] = "Control (⌃)"
+        }
+        return names.joined(separator: " or ")
     }
 
     // MARK: - Hotkey health

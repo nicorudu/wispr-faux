@@ -3,7 +3,7 @@
 Push-to-talk dictation for macOS: hold a key, speak, release, and the text appears in the focused app.
 The roadmap, architecture and step-by-step plan are in [BUILD_PLAN.md](BUILD_PLAN.md).
 
-**Status:** Step 2 (permissions + hotkey) done. Holding Fn is detected in any app and logged, and the menu bar icon fills while it's held. Recording, transcription and pasting come in Steps 3–6.
+**Status:** Step 2 (permissions + hotkey) done. Holding Control is detected in any app and logged, and the menu bar icon fills while it's held. Recording, transcription and pasting come in Steps 3–6.
 
 ## Requirements
 
@@ -57,19 +57,19 @@ cd Packages/DictationKit && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Devel
 On first launch Dictate opens **Set Up Dictate** (also in the menu: *Finish Setup…* / *Permissions…*):
 
 - **Microphone, Accessibility, Input Monitoring.** Each row updates live as you flip switches in System Settings. If the hotkey still says *relaunch needed* after granting Input Monitoring, click **Relaunch Dictate**.
-- **Globe key.** Set *System Settings → Keyboard → “Press 🌐 key to”* to **Do Nothing**, or Fn also opens emoji / switches input source. The row reads the current setting.
-- **Try it.** Hold Fn: the dot lights up. Fn+Space locks hands-free; press Fn again to stop; Esc cancels.
+- **Globe key** (only shown if Fn is turned on). Set *System Settings → Keyboard → “Press 🌐 key to”* to **Do Nothing**, or Fn also opens emoji / switches input source. The row reads the current setting.
+- **Try it.** Hold Control: the dot lights up. Control+Space locks hands-free; press Control again to stop; Esc cancels.
 
 Shortcuts:
 
 | Gesture | Result |
 |---|---|
-| Hold Fn, release | Start / stop dictation |
-| Fn + Space | Hands-free: keeps listening after Fn is released; press Fn again to stop |
+| Hold Control (either side), release | Start / stop dictation |
+| Control + Space | Hands-free: keeps listening after Control is released; press Control again to stop |
 | Esc | Cancel (only swallowed while dictating) |
-| Fn + another key (e.g. Fn+Delete) | Treated as a normal shortcut: dictation is cancelled and the key passes through |
+| Control + another key or a click (e.g. ⌃C, Ctrl-click) | Treated as a normal shortcut: dictation is cancelled and the key or click passes through |
 
-Keyboards without Fn: turn on Right Option, Right Command or Right Control in **Settings → Hold to talk**. Those keys are not swallowed, so they still work as modifiers.
+Other keys: **Settings → Hold to talk** can switch on Fn (🌐), Right Option or Right Command, or limit Control to one side. Fn is swallowed so macOS doesn't act on it too; the others always reach apps, so they keep working as modifiers.
 
 Watch hotkey events live:
 
@@ -77,7 +77,7 @@ Watch hotkey events live:
 log stream --style compact --predicate 'subsystem == "com.example.dictate"'
 ```
 
-Debug builds add a **Debug** menu: *Simulate Event-Tap Timeout on Next Key* stalls the tap for 2.5 s on your next key press so macOS disables it; the log should then show it re-enabled, and Fn keeps working.
+Debug builds add a **Debug** menu: *Simulate Event-Tap Timeout on Next Key* stalls the tap for 2.5 s on your next key press so macOS disables it; the log should then show it re-enabled, and the hotkey keeps working.
 
 ## Signing and permissions
 

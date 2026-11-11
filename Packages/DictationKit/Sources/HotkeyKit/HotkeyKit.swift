@@ -7,6 +7,7 @@ public enum KeyCode {
     /// Some Globe-key keyboards also send a key down/up with this code. It has no other
     /// meaning, so it's swallowed whenever Fn is a trigger.
     public static let globe: CGKeyCode = 179
+    public static let leftControl: CGKeyCode = 59
     public static let rightCommand: CGKeyCode = 54
     public static let rightOption: CGKeyCode = 61
     public static let rightControl: CGKeyCode = 62
@@ -32,6 +33,6 @@ public enum HotkeyEvent: Sendable, Equatable {
     /// Trigger + Space: keep recording after the trigger is released.
     case handsFreeToggled
     /// Discard the recording. Sent for Esc, and when the trigger turns out to be used as
-    /// a modifier (e.g. Fn+Delete), so a chord never produces a dictation.
+    /// a modifier (e.g. ⌃C, Ctrl-click, Fn+Delete), so a chord never produces a dictation.
     case cancel
 }

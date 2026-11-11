@@ -76,9 +76,13 @@ public final class EventTapMonitor: @unchecked Sendable {
         guard session == nil else { return }
 
         let session = TapSession(monitor: self)
+        // Mouse-button downs are only watched to cancel on Ctrl-click; never swallowed.
         let mask: CGEventMask = (1 << CGEventType.keyDown.rawValue)
             | (1 << CGEventType.keyUp.rawValue)
             | (1 << CGEventType.flagsChanged.rawValue)
+            | (1 << CGEventType.leftMouseDown.rawValue)
+            | (1 << CGEventType.rightMouseDown.rawValue)
+            | (1 << CGEventType.otherMouseDown.rawValue)
         // Retained for the tap thread's lifetime; released when its run loop exits.
         let refcon = Unmanaged.passRetained(session).toOpaque()
         guard let tap = CGEvent.tapCreate(
@@ -156,14 +160,15 @@ public final class EventTapMonitor: @unchecked Sendable {
         case .tapDisabledByUserInput:
             reenable(session, reason: "user input")
             return passThrough
-        case .keyDown, .keyUp, .flagsChanged:
+        case .keyDown, .keyUp, .flagsChanged, .leftMouseDown, .rightMouseDown, .otherMouseDown:
             break
         default:
             return passThrough
         }
 
         let started = ContinuousClock.now
-        if let stall = shared.withLock({ state -> TimeInterval? in
+        let isKeyboard = type == .keyDown || type == .keyUp || type == .flagsChanged
+        if isKeyboard, let stall = shared.withLock({ state -> TimeInterval? in
             defer { state.pendingStall = nil }
             return state.pendingStall
         }) {
@@ -276,6 +281,7 @@ extension KeyInput {
         let kind: Kind = switch type {
         case .keyDown: .keyDown
         case .keyUp: .keyUp
+        case .leftMouseDown, .rightMouseDown, .otherMouseDown: .mouseDown
         default: .flagsChanged
         }
         self.init(

@@ -17,7 +17,7 @@ struct SettingsView: View {
             } header: {
                 Text("Hold to talk")
             } footer: {
-                Text("Fn is best on Mac keyboards. Turn on a right-hand key for keyboards without Fn.")
+                Text("Control works on every keyboard, and shortcuts like ⌃C and Ctrl-click still work: they cancel instead of dictating.")
                     .foregroundStyle(.secondary)
             }
 

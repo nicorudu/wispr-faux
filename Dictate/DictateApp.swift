@@ -1,16 +1,40 @@
+import AppKit
 import SwiftUI
 
 @main
 struct DictateApp: App {
-    @State private var controller = DictationController()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("Dictate", systemImage: controller.state.menuBarSymbol) {
-            MenuContent(controller: controller)
+        MenuBarExtra {
+            MenuContent(controller: appDelegate.controller, openSetup: appDelegate.showSetup)
+        } label: {
+            Image(systemName: appDelegate.controller.state.menuBarSymbol)
         }
 
         Settings {
-            SettingsView()
+            SettingsView(controller: appDelegate.controller, openSetup: appDelegate.showSetup)
         }
+    }
+}
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    let controller = DictationController()
+    private lazy var setupWindow = SetupWindowController(controller: controller)
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        controller.start()
+        if !controller.permissions.allGranted {
+            showSetup()
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        controller.stop()
+    }
+
+    func showSetup() {
+        setupWindow.show()
     }
 }

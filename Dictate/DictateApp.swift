@@ -28,6 +28,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !controller.permissions.allGranted {
             showSetup()
         }
+        #if DEBUG
+        // `open Dictate.app --args -DebugRecordSeconds 3` records once at launch.
+        let seconds = UserDefaults.standard.double(forKey: "DebugRecordSeconds")
+        if seconds > 0 { controller.debugRecord(seconds: seconds) }
+        #endif
     }
 
     func applicationWillTerminate(_ notification: Notification) {

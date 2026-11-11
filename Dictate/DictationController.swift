@@ -1,4 +1,5 @@
 import AppKit
+import AudioKit
 import HistoryKit
 import HotkeyKit
 import InsertionKit
@@ -11,7 +12,8 @@ import os
 ///
 /// Step 2 wires in the hotkey and permissions: holding the trigger switches to
 /// `.recording` (the menu bar icon fills in) and every event is logged. Step 3 adds the
-/// `inserter`, exercised for now by `pasteTester`. Audio (Step 4), transcription (Step 5)
+/// `inserter`, exercised for now by `pasteTester`. Step 4 records while the trigger is
+/// held and hands the audio to `recordingTester` for playback. Transcription (Step 5)
 /// and insertion hook into `handle(_:)` in Step 6.
 @MainActor
 @Observable
@@ -77,13 +79,22 @@ final class DictationController {
     /// Step 3 spike: "Paste Test String" in the menu.
     let pasteTester: PasteTester
 
+    /// Records the microphone while the trigger is held.
+    let recorder = MicrophoneRecorder()
+    /// Step 4 spike: plays back the last recording and shows its stats in the menu.
+    let recordingTester = RecordingTester()
+    /// Live microphone level, 0…1, while recording; 0 otherwise.
+    private(set) var inputLevel: Float = 0
+
     @ObservationIgnored private let monitor: EventTapMonitor
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
+    @ObservationIgnored private var levelTask: Task<Void, Never>?
     @ObservationIgnored private var pressStartedAt: ContinuousClock.Instant?
     /// Permission state at the last failed tap start; a change allows another attempt.
     @ObservationIgnored private var permissionsAtLastFailure: [PermissionStatus]?
     @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "Hotkey")
+    @ObservationIgnored private let audioLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "Audio")
 
     private static let triggersDefaultsKey = "hotkey.triggers"
 
@@ -107,8 +118,9 @@ final class DictationController {
             triggers: \(self.triggerDescription, privacy: .public)
             """)
         eventTask = Task { [weak self, events = monitor.events] in
+            // One event at a time: a release waits for the microphone to finish starting.
             for await event in events {
-                self?.handle(event)
+                await self?.handle(event)
             }
         }
         pollTask = Task { [weak self] in
@@ -125,6 +137,7 @@ final class DictationController {
         monitor.stop()
         // Don't quit with Dictate's text still standing in for the user's clipboard.
         inserter.restoreNow()
+        recordingTester.deleteRecording()
     }
 
     func refreshNow() {
@@ -133,29 +146,101 @@ final class DictationController {
 
     // MARK: - Hotkey events
 
-    private func handle(_ event: HotkeyEvent) {
+    private func handle(_ event: HotkeyEvent) async {
         switch event {
         case .pushToTalkPressed:
+            let requestedAt = mach_absolute_time()
             pressStartedAt = .now
             isHandsFree = false
             state = .recording
             log.notice("Push-to-talk down")
+            await startRecording(requestedAt: requestedAt)
 
         case .handsFreeToggled:
             isHandsFree = true
             log.notice("Hands-free locked")
 
         case .pushToTalkReleased:
+            let releasedAt = mach_absolute_time()
             let held = pressStartedAt.map { ContinuousClock.now - $0 }
             lastHoldDuration = held
-            endSession()
             log.notice("Push-to-talk up after \(Self.milliseconds(held), privacy: .public) ms")
+            await finishRecording(keep: true, heldFor: held, releasedAt: releasedAt)
+            endSession()
 
         case .cancel:
-            endSession()
             log.notice("Dictation cancelled")
+            await finishRecording(keep: false, heldFor: nil, releasedAt: mach_absolute_time())
+            endSession()
         }
     }
+
+    // MARK: - Recording
+
+    private func startRecording(requestedAt: UInt64) async {
+        recordingTester.stopPlayback()
+        permissions.refresh()
+        guard permissions.microphone == .granted else {
+            recordingTester.didFail("Not recording: Microphone access is off (see Permissions…)")
+            audioLog.notice("Not recording: microphone permission is \(String(describing: self.permissions.microphone), privacy: .public)")
+            return
+        }
+        do {
+            let device = try await recorder.start(requestedAt: requestedAt)
+            audioLog.notice("""
+                Recording from \(device.name, privacy: .public) \
+                (\(device.transport.rawValue, privacy: .public), \(Int(device.sampleRate), privacy: .public) Hz \
+                × \(device.channelCount, privacy: .public) ch)
+                """)
+            startLevelUpdates()
+        } catch {
+            recordingTester.didFail("Not recording: \(error.localizedDescription)")
+            audioLog.error("Recording failed to start: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Stops the microphone. `keep` hands the audio to the recording tester; otherwise
+    /// it's thrown away (Esc).
+    private func finishRecording(keep: Bool, heldFor: Duration?, releasedAt: UInt64) async {
+        levelTask?.cancel()
+        levelTask = nil
+        inputLevel = 0
+        if keep {
+            if let recording = await recorder.stop(releasedAt: releasedAt) {
+                recordingTester.didRecord(recording, heldFor: heldFor)
+            }
+        } else {
+            await recorder.cancel()
+        }
+    }
+
+    /// Mirrors the recorder's level into `inputLevel` for the setup window's meter.
+    private func startLevelUpdates() {
+        levelTask?.cancel()
+        levelTask = Task { [weak self, recorder] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let level = recorder.level
+                if abs(level - inputLevel) > 0.01 { inputLevel = level }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+        }
+    }
+
+    #if DEBUG
+    /// Records for `seconds` without the hotkey, to check the microphone path from a
+    /// script or the Debug menu: `open Dictate.app --args -DebugRecordSeconds 3`.
+    func debugRecord(seconds: Double) {
+        guard state == .idle else { return }
+        Task {
+            state = .recording
+            await startRecording(requestedAt: mach_absolute_time())
+            try? await Task.sleep(for: .seconds(seconds))
+            await finishRecording(keep: true, heldFor: .seconds(seconds), releasedAt: mach_absolute_time())
+            endSession()
+        }
+    }
+    #endif
 
     private func endSession() {
         pressStartedAt = nil

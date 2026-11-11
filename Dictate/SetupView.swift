@@ -116,7 +116,11 @@ private struct HotkeyTestRow: View {
         SetupRow(systemImage: "hand.tap", title: "Try it", detail: detail) {
             switch controller.hotkeyStatus {
             case .running:
-                HeldIndicator(isHeld: controller.state == .recording, isHandsFree: controller.isHandsFree)
+                HeldIndicator(
+                    isHeld: controller.state == .recording,
+                    isHandsFree: controller.isHandsFree,
+                    level: controller.inputLevel
+                )
             case .waitingForPermission:
                 StatusBadge(text: "Waiting", systemImage: "hourglass", color: .secondary)
             case .failed:
@@ -148,7 +152,7 @@ private struct HotkeyTestRow: View {
                 let seconds = (held / .seconds(1)).formatted(.number.precision(.fractionLength(2)))
                 return "Got it: held for \(seconds) s. Hold \(controller.triggerDescription) + Space for hands-free."
             }
-            return "Hold \(controller.triggerDescription). The dot lights up while it's held."
+            return "Hold \(controller.triggerDescription) and say something. The dot lights up and the bar follows your voice."
         }
     }
 }
@@ -212,9 +216,12 @@ private struct StatusBadge: View {
 private struct HeldIndicator: View {
     let isHeld: Bool
     let isHandsFree: Bool
+    /// Microphone level, 0…1.
+    let level: Float
 
     var body: some View {
         HStack(spacing: 6) {
+            LevelBar(level: isHeld ? level : 0)
             Circle()
                 .fill(isHeld ? Color.red : Color.secondary.opacity(0.3))
                 .frame(width: 14, height: 14)
@@ -224,5 +231,25 @@ private struct HeldIndicator: View {
                 .frame(width: 72, alignment: .leading)
         }
         .fixedSize()
+    }
+}
+
+/// A small horizontal input meter.
+private struct LevelBar: View {
+    let level: Float
+
+    var body: some View {
+        Capsule()
+            .fill(.secondary.opacity(0.2))
+            .overlay(alignment: .leading) {
+                GeometryReader { proxy in
+                    Capsule()
+                        .fill(level > 0.95 ? Color.orange : Color.green)
+                        .frame(width: proxy.size.width * CGFloat(min(1, max(0, level))))
+                }
+            }
+            .clipShape(Capsule())
+            .frame(width: 48, height: 6)
+            .animation(.linear(duration: 0.05), value: level)
     }
 }

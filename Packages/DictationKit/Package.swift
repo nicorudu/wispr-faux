@@ -22,7 +22,9 @@ let package = Package(
     ],
     targets: [
         .target(name: "HotkeyKit"),
-        .target(name: "AudioKit"),
+        .target(name: "AudioKit", dependencies: ["ObjCExceptions"]),
+        // Catches Objective-C exceptions from AVAudioEngine, which Swift can't.
+        .target(name: "ObjCExceptions"),
         .target(name: "TranscriptionKit"),
         .target(name: "PostProcessKit"),
         .target(name: "ContextKit"),
@@ -31,6 +33,7 @@ let package = Package(
         .testTarget(
             name: "DictationKitTests",
             dependencies: [
+                "AudioKit",
                 "HotkeyKit",
                 "PostProcessKit",
                 "HistoryKit",

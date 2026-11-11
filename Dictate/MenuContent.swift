@@ -28,6 +28,20 @@ struct MenuContent: View {
             Text(line)
         }
 
+        Divider()
+
+        // Step 4 spike: hold the hotkey, speak, release, then play it back.
+        Text(controller.recordingTester.summary ?? "No recording yet: hold \(controller.triggerDescription) and speak")
+        if let line = controller.recordingTester.detail {
+            Text(line)
+        }
+        Button("Play Last Recording", action: controller.recordingTester.play)
+            .disabled(controller.recordingTester.wavURL == nil)
+        Button("Show Recording in Finder", action: controller.recordingTester.revealInFinder)
+            .disabled(controller.recordingTester.wavURL == nil)
+
+        Divider()
+
         Button(controller.permissions.allGranted ? "Permissions…" : "Finish Setup…", action: openSetup)
 
         SettingsLink {
@@ -38,6 +52,7 @@ struct MenuContent: View {
         #if DEBUG
         Menu("Debug") {
             Button("Simulate Event-Tap Timeout on Next Key", action: controller.simulateTapTimeout)
+            Button("Record 3 Seconds Without the Hotkey") { controller.debugRecord(seconds: 3) }
             Text("Tap re-enabled: \(controller.tapStats.reenableCount)×\(lastReason)")
             Text("Slow callbacks: \(controller.tapStats.slowCallbackCount)")
         }

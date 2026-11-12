@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- System.Windows.Automation (UI Automation) for reading the focused field. -->
+    <UseWPF>true</UseWPF>
+    <AssemblyName>WisprFaux</AssemblyName>
+    <RootNamespace>WisprFaux</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Product>Wispr Faux</Product>
+    <Version>0.1.0</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- WPF's implicit usings leave these out. -->
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WisprFaux.Core\WisprFaux.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Speech to text: whisper.cpp. Vulkan runs it on the GPU (any vendor); the CPU
+         runtime is the fallback when there is no usable GPU. -->
+    <PackageReference Include="Whisper.net" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.1" />
+    <!-- Stumble cleanup on this PC: llama.cpp. -->
+    <PackageReference Include="LLamaSharp" Version="0.27.0" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
+    <PackageReference Include="LLamaSharp.Backend.Vulkan.Windows" Version="0.27.0" />
+    <!-- Microphone. -->
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
+    <!-- API keys are encrypted with DPAPI (readable only by this Windows user). -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+</Project>

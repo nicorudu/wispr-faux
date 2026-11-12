@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Platform-neutral logic: cleanup prompt and guard, stumble cues, shortcut matching,
+       speech gate, history, cloud engine. Tested on any OS by tests/WisprFaux.Core.Tests. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>WisprFaux.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="WisprFaux.Core.Tests" />
+  </ItemGroup>
+</Project>

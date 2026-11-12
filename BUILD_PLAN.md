@@ -147,7 +147,7 @@ Two guards:
 | **v0.2** | History window; custom dictionary/replacements; custom vocabulary as a Whisper prompt; start/stop sounds; launch at login; mic picker; per-app opt-out list |
 | **v0.3** | **Claude cleanup** (§6): punctuation, filler removal, lists, tone per app. Command mode: select text, hold a hotkey, speak an instruction, the selection is replaced. Uses AX before/after context. |
 | **v0.4** | Streaming partial results in the pill; optional cloud speech-to-text engine; `{{TAB}}`/`{{BREAK}}`-style multi-field insertion (Wispr pastes sections and presses Tab between them) |
-| **later** | Windows port (`WH_KEYBOARD_LL` hook, `SendInput` Ctrl+V, UI Automation for context), which mirrors Wispr's separate Windows helper |
+| **later** | Windows port (`WH_KEYBOARD_LL` hook, `SendInput` Ctrl+V, UI Automation for context), which mirrors Wispr's separate Windows helper. Started in [windows/](windows/README.md): C#/.NET, whisper.cpp via Whisper.net, llama.cpp via LLamaSharp |
 
 ---
 

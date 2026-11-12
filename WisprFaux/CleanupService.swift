@@ -44,7 +44,7 @@ final class CleanupService {
 
     let store = CleanupModelStore.standard
     @ObservationIgnored private let localEngine: LocalEngine
-    @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "Cleanup")
+    @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Wispr Faux", category: "Cleanup")
 
     private static let modeKey = "cleanup.mode"
     private static let providerKey = "cleanup.provider"
@@ -209,7 +209,7 @@ final class CleanupService {
     }
 
     private func keychainItem(for provider: CloudProvider) -> KeychainItem {
-        KeychainItem(service: "com.example.dictate.cleanup", account: provider.id)
+        KeychainItem(service: "com.example.wisprfaux.cleanup", account: provider.id)
     }
 
     static func describe(_ kind: CleanupOutcome.Kind) -> String {

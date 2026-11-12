@@ -1,7 +1,7 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// Core modules for Dictate. Each module maps to a box in BUILD_PLAN.md §2 and is
+// Core modules for Wispr Faux. Each module maps to a box in BUILD_PLAN.md §2 and is
 // testable on its own; the app target imports them through the DictationKit product.
 let package = Package(
     name: "DictationKit",
@@ -21,7 +21,7 @@ let package = Package(
             ]
         ),
         // Benchmarks Whisper models on audio files from the command line (Step 5).
-        .executable(name: "dictate-bench", targets: ["DictateBench"]),
+        .executable(name: "wisprfaux-bench", targets: ["WisprFauxBench"]),
     ],
     dependencies: [
         // On-device Whisper on Core ML. Pinned: model loading and the offline guarantees in
@@ -52,7 +52,7 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "DictateBench",
+            name: "WisprFauxBench",
             dependencies: ["AudioKit", "TranscriptionKit", "CleanupKit", "PostProcessKit"]
         ),
         .target(name: "PostProcessKit"),

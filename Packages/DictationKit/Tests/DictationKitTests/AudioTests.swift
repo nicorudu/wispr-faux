@@ -294,7 +294,7 @@ struct WAVEncoderTests {
     /// Apple's own reader opens the file as 16 kHz mono with the same samples.
     @Test func roundTripsThroughAVAudioFile() throws {
         let samples = sine(amplitude: 0.5, seconds: 0.5)
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("dictate-test-\(UUID().uuidString).wav")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("wisprfaux-test-\(UUID().uuidString).wav")
         defer { try? FileManager.default.removeItem(at: url) }
         try WAVEncoder.encode(samples).write(to: url)
 

@@ -1,9 +1,9 @@
 import Foundation
 @preconcurrency import WhisperKit
 
-/// Where Whisper models live: `~/Library/Application Support/Dictate/Models`.
+/// Where Whisper models live: `~/Library/Application Support/Wispr Faux/Models`.
 ///
-/// `download(_:)` is the only code in Dictate that uses the network, and runs only when
+/// `download(_:)` is the only code in Wispr Faux that uses the network, and runs only when
 /// the user asks for a model. Loading and transcribing work entirely from these files.
 public struct ModelStore: Sendable {
     public enum StoreError: Error, LocalizedError {
@@ -25,7 +25,7 @@ public struct ModelStore: Sendable {
 
     public static var standard: ModelStore {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return ModelStore(directory: support.appending(path: "Dictate/Models", directoryHint: .isDirectory))
+        return ModelStore(directory: support.appending(path: "Wispr Faux/Models", directoryHint: .isDirectory))
     }
 
     /// The model's Core ML files, laid out the way WhisperKit downloads them.

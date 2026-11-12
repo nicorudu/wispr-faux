@@ -1,6 +1,6 @@
-# XcodeGen spec — source of truth for Dictate.xcodeproj.
+# XcodeGen spec — source of truth for WisprFaux.xcodeproj.
 # Regenerate after editing:  xcodegen generate
-name: Dictate
+name: WisprFaux
 
 options:
   bundleIdPrefix: com.example
@@ -25,15 +25,15 @@ packages:
     path: Packages/DictationKit
 
 targets:
-  Dictate:
+  WisprFaux:
     type: application
     platform: macOS
     sources:
-      - path: Dictate
+      - path: WisprFaux
         excludes:
           - "LaunchAgents/**"
-      # The launch agent that opens Dictate at login and relaunches it after a crash.
-      - path: Dictate/LaunchAgents/com.example.dictate.agent.plist
+      # The launch agent that opens Wispr Faux at login and relaunches it after a crash.
+      - path: WisprFaux/LaunchAgents/com.example.wisprfaux.agent.plist
         buildPhase:
           copyFiles:
             destination: wrapper
@@ -42,25 +42,25 @@ targets:
       - package: DictationKit
         product: DictationKit
     info:
-      path: Dictate/Info.plist
+      path: WisprFaux/Info.plist
       properties:
-        CFBundleDisplayName: Dictate
+        CFBundleDisplayName: Wispr Faux
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         LSApplicationCategoryType: public.app-category.productivity
         # Menu-bar-only app: no Dock icon, never steals focus on launch.
         LSUIElement: true
-        NSMicrophoneUsageDescription: Dictate records your voice only while you hold the dictation key, so it can transcribe what you say.
+        NSMicrophoneUsageDescription: Wispr Faux records your voice only while you hold the dictation key, so it can transcribe what you say.
     entitlements:
-      path: Dictate/Dictate.entitlements
+      path: WisprFaux/WisprFaux.entitlements
       properties:
         # Hardened Runtime blocks the microphone unless this is declared.
         # No App Sandbox: the event tap, Accessibility reads and synthetic Cmd+V need it off.
         com.apple.security.device.audio-input: true
     settings:
       base:
-        PRODUCT_NAME: Dictate
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.dictate
+        PRODUCT_NAME: Wispr Faux
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.wisprfaux
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
         COMBINE_HIDPI_IMAGES: YES

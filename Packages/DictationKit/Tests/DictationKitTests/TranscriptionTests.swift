@@ -5,7 +5,7 @@ import Testing
 @Suite("ModelStore")
 struct ModelStoreTests {
     private func scratchStore() -> ModelStore {
-        ModelStore(directory: FileManager.default.temporaryDirectory.appending(path: "dictate-models-\(UUID().uuidString)"))
+        ModelStore(directory: FileManager.default.temporaryDirectory.appending(path: "wisprfaux-models-\(UUID().uuidString)"))
     }
 
     private func touch(_ url: URL) throws {
@@ -65,7 +65,7 @@ struct WhisperKitTranscriberTests {
     }
 
     @Test func refusesToLoadAModelThatIsNotDownloaded() async {
-        let store = ModelStore(directory: FileManager.default.temporaryDirectory.appending(path: "dictate-empty-\(UUID().uuidString)"))
+        let store = ModelStore(directory: FileManager.default.temporaryDirectory.appending(path: "wisprfaux-empty-\(UUID().uuidString)"))
         let transcriber = WhisperKitTranscriber(model: .smallEnglish, store: store)
         await #expect(throws: WhisperKitTranscriber.TranscriberError.self) {
             try await transcriber.load()

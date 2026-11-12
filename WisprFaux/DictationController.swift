@@ -81,7 +81,7 @@ final class DictationController {
     let history = HistoryStore(
         capacity: 100,
         fileURL: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appending(path: "Dictate/history.json")
+            .appending(path: "Wispr Faux/history.json")
     )
     /// Newest first, mirrored from `history` for the menu.
     private(set) var recentTranscripts: [TranscriptRecord] = []
@@ -123,9 +123,9 @@ final class DictationController {
     @ObservationIgnored private var pressStartedAt: ContinuousClock.Instant?
     /// Permission state at the last failed tap start; a change allows another attempt.
     @ObservationIgnored private var permissionsAtLastFailure: [PermissionStatus]?
-    @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "Hotkey")
-    @ObservationIgnored private let audioLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "Audio")
-    @ObservationIgnored private let pasteLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "Paste")
+    @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Wispr Faux", category: "Hotkey")
+    @ObservationIgnored private let audioLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Wispr Faux", category: "Audio")
+    @ObservationIgnored private let pasteLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Wispr Faux", category: "Paste")
 
     private static let triggersDefaultsKey = "hotkey.triggers"
 
@@ -168,7 +168,7 @@ final class DictationController {
         pollTask?.cancel()
         eventTask?.cancel()
         monitor.stop()
-        // Don't quit with Dictate's text still standing in for the user's clipboard.
+        // Don't quit with Wispr Faux's text still standing in for the user's clipboard.
         inserter.restoreNow()
         recordingTester.deleteRecording()
     }
@@ -512,7 +512,7 @@ final class DictationController {
 
     #if DEBUG
     /// Records for `seconds` without the hotkey, to check the microphone path from a
-    /// script or the Debug menu: `open Dictate.app --args -DebugRecordSeconds 3`.
+    /// script or the Debug menu: `open "Wispr Faux.app" --args -DebugRecordSeconds 3`.
     func debugRecord(seconds: Double) {
         guard state == .idle else { return }
         Task {

@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 
-/// What has keyboard focus when Dictate is about to paste.
+/// What has keyboard focus when Wispr Faux is about to paste.
 public struct FocusedFieldInfo: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
         /// A text field, text area or other element that takes text.
@@ -45,7 +45,7 @@ public struct FocusedFieldInfo: Sendable, Equatable {
 
 /// Reads the system-wide focused element through Accessibility (`AXFocusedUIElement`,
 /// its role, subrole and whether its value is settable). Needs Accessibility access,
-/// which Dictate already has for the hotkey.
+/// which Wispr Faux already has for the hotkey.
 public struct FocusedFieldReader: Sendable {
     /// How long to wait for an app that doesn't answer (a hung app would otherwise hold
     /// Accessibility calls for six seconds).

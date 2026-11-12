@@ -1,4 +1,4 @@
-/// A speech-to-text engine. Dictate's is on-device WhisperKit: audio never leaves the Mac.
+/// A speech-to-text engine. Wispr Faux's is on-device WhisperKit: audio never leaves the Mac.
 public protocol Transcriber: Sendable {
     /// - Parameter pcm16k: Mono Float32 samples at 16 kHz.
     func transcribe(_ pcm16k: [Float]) async throws -> Transcription

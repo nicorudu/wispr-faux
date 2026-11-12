@@ -12,9 +12,9 @@ struct SetupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Set Up Dictate")
+                Text("Set Up Wispr Faux")
                     .font(.title2.bold())
-                Text("Hold a key, speak, let go: your words appear wherever you're typing. Dictate needs three permissions for that.")
+                Text("Hold a key, speak, let go: your words appear wherever you're typing. Wispr Faux needs three permissions for that.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -125,7 +125,7 @@ private struct HotkeyTestRow: View {
                 StatusBadge(text: "Waiting", systemImage: "hourglass", color: .secondary)
             case .failed:
                 VStack(alignment: .trailing, spacing: 4) {
-                    Button("Relaunch Dictate", action: AppRelauncher.relaunch)
+                    Button("Relaunch Wispr Faux", action: AppRelauncher.relaunch)
                         .buttonStyle(.borderedProminent)
                     Button("Try Again", action: controller.retryHotkey)
                         .buttonStyle(.link)
@@ -140,7 +140,7 @@ private struct HotkeyTestRow: View {
         case .waitingForPermission:
             return "The hotkey starts as soon as Accessibility is allowed."
         case .failed:
-            return "macOS hasn't let Dictate watch the keyboard yet. After allowing Input Monitoring, macOS usually needs Dictate to relaunch."
+            return "macOS hasn't let Wispr Faux watch the keyboard yet. After allowing Input Monitoring, macOS usually needs Wispr Faux to relaunch."
         case .running:
             if controller.isSecureInputActive {
                 return "Another app has secure keyboard input on (often a password field), which can hide the hotkey. Click away from it and try again."

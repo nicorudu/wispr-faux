@@ -73,7 +73,7 @@ struct MenuContent: View {
 
         Divider()
 
-        Button("Quit Dictate") {
+        Button("Quit Wispr Faux") {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")

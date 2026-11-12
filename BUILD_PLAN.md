@@ -1,6 +1,6 @@
 # Dictation App — Build Plan
 
-*Working codename: **Dictate** (rename anytime). Written 2026-11-11 from a static teardown of Wispr Flow 1.6.1457 (app.asar + Swift helper), done with REA.*
+*Project name: **Wispr Faux** (working codename was Dictate). Written 2026-11-11 from a static teardown of Wispr Flow 1.6.1457 (app.asar + Swift helper), done with REA.*
 
 A push-to-talk dictation app for macOS: hold a key, speak, release, and clean text appears in whatever text field has focus.
 
@@ -41,7 +41,7 @@ A push-to-talk dictation app for macOS: hold a key, speak, release, and clean te
 ## 2. Architecture
 
 ```
-┌──────────────────────────── Dictate.app (single process) ────────────────────────────┐
+┌─────────────────────────── Wispr Faux.app (single process) ──────────────────────────┐
 │                                                                                      │
 │  HotkeyKit ──events──▶ DictationController (actor, state machine) ◀── Settings/Prefs │
 │  (CGEventTap thread)        │        │          │          │                         │
@@ -248,7 +248,7 @@ content-type: application/json
    sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
    ```
 2. Create the app:
-   - Xcode → macOS App (SwiftUI), name `Dictate`, bundle ID `com.<you>.dictate`, signed with your Apple Development team.
+   - Xcode → macOS App (SwiftUI), name `WisprFaux` (display name "Wispr Faux"), bundle ID `com.<you>.wisprfaux`, signed with your Apple Development team.
    - Signing & Capabilities: **Hardened Runtime ON**, **App Sandbox OFF**.
    - Info: `LSUIElement = YES` (menu bar only); `NSMicrophoneUsageDescription`.
 3. Add a local Swift package `Packages/DictationKit` with the targets from §2, then `git init`.
@@ -257,8 +257,8 @@ content-type: application/json
    WHISPER_CLONE/
    ├── BUILD_PLAN.md
    ├── rea/                       # existing REA checkout — not part of the app
-   ├── Dictate.xcodeproj
-   ├── Dictate/                   # app target (UI, controller, onboarding)
+   ├── WisprFaux.xcodeproj
+   ├── WisprFaux/                 # app target (UI, controller, onboarding)
    └── Packages/DictationKit/     # HotkeyKit, AudioKit, TranscriptionKit, …
    ```
 

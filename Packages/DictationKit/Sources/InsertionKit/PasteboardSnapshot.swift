@@ -2,7 +2,7 @@ import AppKit
 import UniformTypeIdentifiers
 
 /// A copy of everything on a pasteboard: every item, and every type on each item, with
-/// its data. Dictate takes one before writing its own text and puts it back afterwards,
+/// its data. Wispr Faux takes one before writing its own text and puts it back afterwards,
 /// so the user's clipboard ends up as it was (BUILD_PLAN.md §1, "Insertion").
 ///
 /// Unlike the teardown, PDF, RTFD and sound data are kept: the MVP promises an identical
@@ -110,6 +110,6 @@ public struct PasteboardSnapshot: Sendable, Equatable {
 
 extension NSPasteboard.PasteboardType {
     /// nspasteboard.org marker: clipboard managers skip items that carry it, so the
-    /// text Dictate puts on the clipboard for a moment doesn't land in their history.
+    /// text Wispr Faux puts on the clipboard for a moment doesn't land in their history.
     public static let transient = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
 }

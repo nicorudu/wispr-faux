@@ -33,7 +33,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         hosting.sizingOptions = .preferredContentSize
 
         let window = NSWindow(contentViewController: hosting)
-        window.title = "Set Up Dictate"
+        window.title = "Set Up Wispr Faux"
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
         window.delegate = self

@@ -5,6 +5,8 @@ The roadmap, architecture and step-by-step plan are in [BUILD_PLAN.md](BUILD_PLA
 
 **Windows:** a C#/.NET version with the same features (hold Ctrl, whisper.cpp with Whisper large-v3 turbo, stumble cleanup on the PC or in the cloud, clipboard-safe paste, tray icon, open at sign-in) is in [windows/](windows/). Its [README](windows/README.md) has step-by-step install instructions.
 
+**iPhone:** a keyboard with a hold-to-talk mic button, transcribing on the iPhone with the same Whisper model, is in [ios/](ios/) (written, not yet built). Its [README](ios/README.md) explains how it works and how to install it from Xcode.
+
 **Status:** Steps 1–6 done: hold Control, speak, release, and the text is pasted into the focused app, transcribed on-device with Whisper large-v3 turbo. Stumbles ("Tuesday, no wait, Wednesday") are cleaned up by a small model on this Mac, or optionally a cloud model. Step 7 is under way: use it for a week and fix what comes up.
 
 Wispr Faux is a personal tool that runs entirely on this Mac: no accounts, no cloud, no network calls (beyond model downloads and the optional cloud cleanup).

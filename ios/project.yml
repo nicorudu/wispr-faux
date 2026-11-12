@@ -1,0 +1,137 @@
+# XcodeGen spec for the iPhone version of Wispr Faux. Regenerate after editing:
+#   cd ios && xcodegen generate
+#
+# The transcription, cleanup, text and history code is the Mac app's own: the targets below
+# compile the files in ../Packages/DictationKit/Sources directly, so both apps share one copy
+# and the Mac package itself is untouched.
+name: WisprFauxPhone
+
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    # Change these two if Xcode says the bundle ID or App Group is taken: any reverse-DNS
+    # name you own works, e.g. com.yourname.
+    WF_BUNDLE_PREFIX: com.example.wisprfaux
+    WF_APP_GROUP: group.com.example.wisprfaux
+    DEVELOPMENT_TEAM: FS3T7J3D7X
+    CODE_SIGN_STYLE: Automatic
+    # The shared sources are written for Swift 6, and build in Swift 5 mode too; Swift 5 keeps
+    # the iPhone-only code free of strict-concurrency errors that only show up on a device build.
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+
+packages:
+  WhisperKit:
+    url: https://github.com/argmaxinc/WhisperKit.git
+    exactVersion: 1.1.1
+
+targets:
+  # --- Shared with the Mac app ----------------------------------------------------------------
+
+  # A module of its own because the cleanup code imports it by name. Static, so the app and
+  # the keyboard each get their own copy and nothing needs embedding.
+  PostProcessKit:
+    type: framework.static
+    platform: iOS
+    sources:
+      - path: ../Packages/DictationKit/Sources/PostProcessKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(WF_BUNDLE_PREFIX).PostProcessKit
+        APPLICATION_EXTENSION_API_ONLY: YES
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
+
+  # --- The app --------------------------------------------------------------------------------
+
+  WisprFauxPhone:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+      # The Mac app's own code, compiled into this app (one copy, shared by both apps):
+      # Whisper models and their store, the cloud cleanup engines, prompt and safety check,
+      # transcript history, and the keychain helper for the cleanup API key.
+      - path: ../Packages/DictationKit/Sources/TranscriptionKit
+        group: Shared with the Mac app
+      - path: ../Packages/DictationKit/Sources/CleanupKit
+        group: Shared with the Mac app
+        # The on-device engine needs MLX and the GPU, which iOS doesn't give apps in the
+        # background; the phone uses the cloud engines.
+        excludes:
+          - LocalEngine.swift
+          - CleanupModelStore.swift
+          - CleanupModel.swift
+      - path: ../Packages/DictationKit/Sources/HistoryKit
+        group: Shared with the Mac app
+      - path: ../WisprFaux/KeychainItem.swift
+        group: Shared with the Mac app
+    dependencies:
+      - target: PostProcessKit
+      - package: WhisperKit
+      - target: WisprFauxKeyboard
+        embed: true
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Wispr Faux
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # Keeps the session alive in the background while the microphone is running.
+        UIBackgroundModes: [audio]
+        NSMicrophoneUsageDescription: Wispr Faux listens while you hold the mic button on its keyboard, so it can type what you say.
+        CFBundleURLTypes:
+          - CFBundleURLName: $(WF_BUNDLE_PREFIX)
+            CFBundleURLSchemes: [wisprfaux]
+        WFAppGroup: $(WF_APP_GROUP)
+    entitlements:
+      path: App/WisprFauxPhone.entitlements
+      properties:
+        com.apple.security.application-groups: [$(WF_APP_GROUP)]
+    settings:
+      base:
+        PRODUCT_NAME: Wispr Faux
+        PRODUCT_BUNDLE_IDENTIFIER: $(WF_BUNDLE_PREFIX).phone
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+
+  WisprFauxKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Keyboard
+      - path: Shared
+    dependencies:
+      - target: PostProcessKit
+    info:
+      path: Keyboard/Info.plist
+      properties:
+        CFBundleDisplayName: Wispr Faux
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        WFAppGroup: $(WF_APP_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            # "Allow Full Access": needed to talk to the app through the App Group.
+            RequestsOpenAccess: true
+            PrimaryLanguage: en-US
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+    entitlements:
+      path: Keyboard/WisprFauxKeyboard.entitlements
+      properties:
+        com.apple.security.application-groups: [$(WF_APP_GROUP)]
+    settings:
+      base:
+        PRODUCT_NAME: WisprFauxKeyboard
+        PRODUCT_BUNDLE_IDENTIFIER: $(WF_BUNDLE_PREFIX).phone.keyboard
+        APPLICATION_EXTENSION_API_ONLY: YES

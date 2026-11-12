@@ -19,13 +19,24 @@ let package = Package(
                 "HistoryKit",
             ]
         ),
+        // Benchmarks Whisper models on audio files from the command line (Step 5).
+        .executable(name: "dictate-bench", targets: ["DictateBench"]),
+    ],
+    dependencies: [
+        // On-device Whisper on Core ML. Pinned: model loading and the offline guarantees in
+        // TranscriptionKit depend on its internals (download paths, tokenizer lookup).
+        .package(url: "https://github.com/argmaxinc/WhisperKit.git", exact: "1.1.1"),
     ],
     targets: [
         .target(name: "HotkeyKit"),
         .target(name: "AudioKit", dependencies: ["ObjCExceptions"]),
         // Catches Objective-C exceptions from AVAudioEngine, which Swift can't.
         .target(name: "ObjCExceptions"),
-        .target(name: "TranscriptionKit"),
+        .target(
+            name: "TranscriptionKit",
+            dependencies: [.product(name: "WhisperKit", package: "WhisperKit")]
+        ),
+        .executableTarget(name: "DictateBench", dependencies: ["AudioKit", "TranscriptionKit"]),
         .target(name: "PostProcessKit"),
         .target(name: "ContextKit"),
         .target(name: "InsertionKit", dependencies: ["HotkeyKit"]),
@@ -34,6 +45,7 @@ let package = Package(
             name: "DictationKitTests",
             dependencies: [
                 "AudioKit",
+                "TranscriptionKit",
                 "HotkeyKit",
                 "PostProcessKit",
                 "HistoryKit",

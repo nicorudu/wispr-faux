@@ -3,7 +3,7 @@
 Push-to-talk dictation for macOS: hold a key, speak, release, and the text appears in the focused app.
 The roadmap, architecture and step-by-step plan are in [BUILD_PLAN.md](BUILD_PLAN.md).
 
-**Status:** Step 2 (permissions + hotkey) done. Step 3 (paste spike) is built: *Paste Test String* in the menu pastes into the app in front and then puts the clipboard back. Checking it across the app matrix below is still to do. Step 4 (audio spike) done: holding the hotkey records 16 kHz mono that plays back cleanly (checked on a fifine USB mic), and the menu plays the last recording back. Transcription and wiring it all together come in Steps 5–6.
+**Status:** Step 2 (permissions + hotkey) done. Step 3 (paste spike) is built: *Paste Test String* in the menu pastes into the app in front and then puts the clipboard back. Checking it across the app matrix below is still to do. Step 4 (audio spike) done: holding the hotkey records 16 kHz mono that plays back cleanly (checked on a fifine USB mic), and the menu plays the last recording back. Step 5 (transcription) done: each recording is transcribed on-device with Whisper large-v3 turbo, accurately on real dictation, and the text shows in the menu about 0.9 s after release. Pasting it into the focused app comes in Step 6.
 
 Dictate is a personal tool that runs entirely on this Mac: no accounts, no cloud, no network calls.
 
@@ -22,7 +22,8 @@ Packages/DictationKit/       Core modules, each testable on its own
   HotkeyKit                  CGEventTap, shortcut matching, keycodes  (Step 2, done)
   InsertionKit               Clipboard backup/restore + Cmd+V         (Step 3, built)
   AudioKit                   AVAudioEngine → 16 kHz mono, levels, WAV (Step 4, built)
-  TranscriptionKit           Transcriber protocol, WhisperKit engine  (Step 5)
+  TranscriptionKit           Whisper on Core ML (WhisperKit 1.1.1)    (Step 5, built)
+  DictateBench               `dictate-bench`: compares models on audio files
   PostProcessKit             Rule-based transcript cleanup
   ContextKit                 Focused-field info via Accessibility     (Step 6)
   HistoryKit                 Recent transcripts
@@ -140,6 +141,49 @@ Debug builds can record without the hotkey: *Debug → Record 3 Seconds Without 
 ```bash
 open build/Build/Products/Debug/Dictate.app --args -DebugRecordSeconds 3
 ```
+
+## Transcription (Step 5)
+
+Dictate transcribes with [WhisperKit](https://github.com/argmaxinc/WhisperKit) (pinned to 1.1.1), which runs Whisper on the Mac's Neural Engine. Nothing leaves the Mac.
+
+- **Model:** Whisper large-v3 turbo, compressed (`openai_whisper-large-v3-v20240930_turbo_632MB`, 646 MB). Models live in `~/Library/Application Support/Dictate/Models`.
+- **Getting it:** if the model isn't there, the menu shows a **Download** button. That download, and `dictate-bench download`, are the only things in Dictate that use the network. Loading and transcribing work entirely from those files, and a model only counts as downloaded once its tokenizer is there too (otherwise WhisperKit would fetch it at load time).
+- **Using it:** hold the hotkey, speak, release, and open the menu. It shows the transcript, how long it took, and how long after release the text was ready. **Copy Last Transcript** puts it on the clipboard. Recordings the gate skips (too short or quiet) aren't transcribed. The log records timings and length, never the words.
+- **Another model:** `defaults write com.example.dictate transcription.model openai_whisper-small.en`, then relaunch. `defaults delete com.example.dictate transcription.model` goes back to the default.
+
+Measured on the M4 Mac mini (16 GB):
+
+| | small.en (487 MB) | large-v3 turbo, compressed (646 MB) |
+|---|---|---|
+| 5 s of speech → text | 0.26–0.30 s | 0.6–0.8 s |
+| 15 s of speech → text | 0.69 s | 1.08 s |
+| Key up → text in the menu (app, M-Track mic) | – | 0.9 s for 6–10 s of speech |
+| Load at launch | 17 s, every launch | 2–7 s; ~2 min the first time |
+| Errors on synthetic test speech | 1.1% | 1.1% |
+
+Turbo is the default: it punctuates better, loads quickly once compiled, and stays under a second for a typical dictation. Debug and Release builds transcribe at the same speed, since the work runs on the Neural Engine.
+
+**Load time:** the first load compiles the model for the Neural Engine, which takes about 2 minutes; the menu says *Loading…* meanwhile, and a dictation made then waits for it. macOS caches the result, so later launches take a few seconds. The cache is shared and limited: it's rebuilt after a macOS update, and loading the same model from another program (such as `dictate-bench`) can push Dictate's copy out, costing one more 2-minute load.
+
+### Comparing models
+
+```bash
+cd Packages/DictationKit && swift build -c release --product dictate-bench
+```
+
+```bash
+.build/release/dictate-bench models
+```
+
+```bash
+.build/release/dictate-bench download small.en
+```
+
+```bash
+.build/release/dictate-bench run turbo_632MB clip1.wav clip2.aiff --runs 3
+```
+
+Any audio file works. A `.txt` file with the same name next to it is used as the reference transcript, and the run reports the word error rate. `say -o clip.aiff -f clip.txt` makes test clips with known text.
 
 ## Signing and permissions
 

@@ -5,6 +5,7 @@ import HotkeyKit
 import InsertionKit
 import Observation
 import os
+import TranscriptionKit
 
 /// Owns the dictation state machine (BUILD_PLAN.md §2):
 ///
@@ -13,8 +14,8 @@ import os
 /// Step 2 wires in the hotkey and permissions: holding the trigger switches to
 /// `.recording` (the menu bar icon fills in) and every event is logged. Step 3 adds the
 /// `inserter`, exercised for now by `pasteTester`. Step 4 records while the trigger is
-/// held and hands the audio to `recordingTester` for playback. Transcription (Step 5)
-/// and insertion hook into `handle(_:)` in Step 6.
+/// held and hands the audio to `recordingTester` for playback. Step 5 transcribes each
+/// recording with `transcription` and shows the text in the menu. Step 6 pastes it.
 @MainActor
 @Observable
 final class DictationController {
@@ -86,6 +87,10 @@ final class DictationController {
     /// Live microphone level, 0…1, while recording; 0 otherwise.
     private(set) var inputLevel: Float = 0
 
+    /// On-device Whisper: loads at launch, transcribes each recording.
+    let transcription = TranscriptionService()
+    @ObservationIgnored private let speechGate = SpeechGate()
+
     @ObservationIgnored private let monitor: EventTapMonitor
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
@@ -111,6 +116,7 @@ final class DictationController {
 
     func start() {
         guard eventTask == nil else { return }
+        transcription.loadIfDownloaded()
         log.notice("""
             Started. Microphone: \(String(describing: self.permissions.microphone), privacy: .public), \
             Accessibility: \(String(describing: self.permissions.accessibility), privacy: .public), \
@@ -162,11 +168,13 @@ final class DictationController {
 
         case .pushToTalkReleased:
             let releasedAt = mach_absolute_time()
+            let releaseInstant = ContinuousClock.now
             let held = pressStartedAt.map { ContinuousClock.now - $0 }
             lastHoldDuration = held
             log.notice("Push-to-talk up after \(Self.milliseconds(held), privacy: .public) ms")
-            await finishRecording(keep: true, heldFor: held, releasedAt: releasedAt)
+            let recording = await finishRecording(keep: true, heldFor: held, releasedAt: releasedAt)
             endSession()
+            if let recording { startTranscription(of: recording, releasedAt: releaseInstant) }
 
         case .cancel:
             log.notice("Dictation cancelled")
@@ -201,16 +209,34 @@ final class DictationController {
 
     /// Stops the microphone. `keep` hands the audio to the recording tester; otherwise
     /// it's thrown away (Esc).
-    private func finishRecording(keep: Bool, heldFor: Duration?, releasedAt: UInt64) async {
+    @discardableResult
+    private func finishRecording(keep: Bool, heldFor: Duration?, releasedAt: UInt64) async -> Recording? {
         levelTask?.cancel()
         levelTask = nil
         inputLevel = 0
-        if keep {
-            if let recording = await recorder.stop(releasedAt: releasedAt) {
-                recordingTester.didRecord(recording, heldFor: heldFor)
-            }
-        } else {
+        guard keep else {
             await recorder.cancel()
+            return nil
+        }
+        let recording = await recorder.stop(releasedAt: releasedAt)
+        if let recording {
+            recordingTester.didRecord(recording, heldFor: heldFor)
+        }
+        return recording
+    }
+
+    /// Transcribes in the background, so the hotkey stays responsive meanwhile.
+    private func startTranscription(of recording: Recording, releasedAt: ContinuousClock.Instant) {
+        let verdict = speechGate.verdict(duration: recording.duration, levels: recording.levels)
+        guard verdict == .speech else {
+            transcription.skip(verdict)
+            return
+        }
+        state = .transcribing
+        Task {
+            await transcription.transcribe(recording, releasedAt: releasedAt)
+            // A new recording may have started meanwhile; leave its state alone.
+            if state == .transcribing { state = .idle }
         }
     }
 
@@ -236,8 +262,10 @@ final class DictationController {
             state = .recording
             await startRecording(requestedAt: mach_absolute_time())
             try? await Task.sleep(for: .seconds(seconds))
-            await finishRecording(keep: true, heldFor: .seconds(seconds), releasedAt: mach_absolute_time())
+            let releaseInstant = ContinuousClock.now
+            let recording = await finishRecording(keep: true, heldFor: .seconds(seconds), releasedAt: mach_absolute_time())
             endSession()
+            if let recording { startTranscription(of: recording, releasedAt: releaseInstant) }
         }
     }
     #endif

@@ -42,6 +42,19 @@ struct MenuContent: View {
 
         Divider()
 
+        // Step 5: on-device transcription. Step 6 pastes the text instead.
+        Text(controller.transcription.statusLine)
+        if controller.transcription.status == .notDownloaded {
+            Button(controller.transcription.downloadButtonTitle, action: controller.transcription.download)
+        }
+        ForEach(controller.transcription.lastTranscriptLines, id: \.self) { line in
+            Text(line)
+        }
+        Button("Copy Last Transcript", action: controller.transcription.copyLastTranscript)
+            .disabled(controller.transcription.lastResult?.text.isEmpty ?? true)
+
+        Divider()
+
         Button(controller.permissions.allGranted ? "Permissions…" : "Finish Setup…", action: openSetup)
 
         SettingsLink {

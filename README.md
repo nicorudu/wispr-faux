@@ -18,6 +18,7 @@ Dictate is a personal tool that runs entirely on this Mac: no accounts, no cloud
 ```
 project.yml                  XcodeGen spec (source of truth for Dictate.xcodeproj)
 Dictate/                     App target: menu bar, settings, setup window, DictationController
+  LaunchAgents/              Opens Dictate at login and relaunches it after a crash
 Packages/DictationKit/       Core modules, each testable on its own
   HotkeyKit                  CGEventTap, shortcut matching, keycodes  (Step 2, done)
   InsertionKit               Clipboard backup/restore + Cmd+V         (Step 3, done)
@@ -38,9 +39,16 @@ Install the Release build in /Applications and have it open at login:
 scripts/install.sh --login
 ```
 
-Run `scripts/install.sh` again after changing or pulling code. It builds Release, quits any running Dictate (two copies would both react to the hotkey), replaces /Applications/Dictate.app, and launches it. Permissions carry over because the bundle ID and signing identity stay the same, and the Whisper model doesn't need recompiling.
+Run `scripts/install.sh` again after changing or pulling code. It builds Release, quits any running Dictate, replaces /Applications/Dictate.app, and starts it again. Permissions carry over because the bundle ID and signing identity stay the same. The first launch after an install recompiles the Whisper model for the Neural Engine (about 2 minutes; a dictation made meanwhile shows *Loading speech model* and waits); later launches take a couple of seconds.
 
-**Settings → General → Open Dictate at login** turns the login item on or off (System Settings → General → Login Items shows it too). Only the installed copy can turn it on, so a development build never becomes the login item. When running a development build from Xcode or `build/`, quit the installed Dictate first.
+**Open at login** is a launch agent (`Dictate/LaunchAgents/com.example.dictate.agent.plist`, registered through `SMAppService`):
+
+- It starts Dictate when you log in, after a restart or shutdown.
+- If Dictate crashes, launchd relaunches it within seconds (checked with `kill -9`: back in 1 s, models ready in 1.6 s).
+- **Quit Dictate** from the menu (or a normal stop, like the one `scripts/install.sh` sends) is respected: it stays quit until the next login, or until you open it from /Applications.
+- Only one Dictate runs at a time, since two would both react to the hotkey. The copy launchd started wins; a second copy steps aside.
+
+**Settings → General → Open Dictate at login** turns it on or off; System Settings → General → Login Items lists it under Dictate. Only the installed copy can turn it on, so a development build never becomes the login item. Versions before the agent registered the app itself as the login item; the first launch of the new version moves that over. When running a development build from Xcode or `build/`, quit the installed Dictate first (`launchctl kickstart gui/$(id -u)/com.example.dictate.agent` starts it again).
 
 ## Build and run
 
@@ -210,7 +218,7 @@ Measured on the M4 Mac mini (16 GB):
 
 Turbo is the default: it punctuates better, loads quickly once compiled, and stays under a second for a typical dictation. Debug and Release builds transcribe at the same speed, since the work runs on the Neural Engine.
 
-**Load time:** the first load compiles the model for the Neural Engine, which takes 2–4 minutes; the menu says *Loading…* meanwhile, and a dictation made then waits for it. macOS caches the result, so later launches take a few seconds. Rebuilding Dictate keeps the cache (2.4 s after a rebuild). The cache is shared and limited, though: it's rebuilt after a macOS update, and loading the same model from another program (such as `dictate-bench`) can push Dictate's copy out, costing one more 2-minute load. macOS also deletes it when the disk runs low (it did at 3 GB free), so keep a few GB free.
+**Load time:** the first load compiles the model for the Neural Engine, which takes 2–4 minutes; the menu says *Loading…* meanwhile, and a dictation made then waits for it. macOS caches the result, so later launches take a few seconds. A Debug rebuild keeps the cache; a new Release build (each `scripts/install.sh`) recompiles once. The cache is shared and limited, though: it's rebuilt after a macOS update, and loading the same model from another program (such as `dictate-bench`) can push Dictate's copy out, costing one more 2-minute load. macOS also deletes it when the disk runs low (it did at 3 GB free), so keep a few GB free.
 
 ### Comparing models
 

@@ -3,18 +3,24 @@ import Observation
 import os
 import ServiceManagement
 
-/// "Open Dictate at login", through `SMAppService` (System Settings → General → Login
-/// Items). Only the copy in /Applications may register, so a development build never
-/// becomes the login item.
+/// "Open Dictate at login", through a launch agent registered with `SMAppService`
+/// (listed in System Settings → General → Login Items). The agent, in
+/// Contents/Library/LaunchAgents, starts Dictate at login and relaunches it if it ever
+/// crashes; a normal quit isn't undone. Only the copy in /Applications may register, so a
+/// development build never becomes the login item.
 @MainActor
 @Observable
 final class LoginItem {
+    static let agentLabel = "com.example.dictate.agent"
+
     private(set) var isEnabled = false
     /// The user turned Dictate off in System Settings → Login Items; only they can undo it.
     private(set) var needsApproval = false
     private(set) var lastError: String?
 
     @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "LoginItem")
+
+    private var agent: SMAppService { SMAppService.agent(plistName: "\(Self.agentLabel).plist") }
 
     init() {
         refresh()
@@ -25,8 +31,14 @@ final class LoginItem {
         Bundle.main.bundleURL.deletingLastPathComponent().path == "/Applications"
     }
 
+    /// Whether launchd started this process through the agent (and so will relaunch it
+    /// after a crash).
+    static var launchedByAgent: Bool {
+        ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] == agentLabel
+    }
+
     func refresh() {
-        let status = SMAppService.mainApp.status
+        let status = agent.status
         isEnabled = status == .enabled
         needsApproval = status == .requiresApproval
     }
@@ -35,9 +47,9 @@ final class LoginItem {
         guard isInstalledCopy else { return }
         do {
             if enabled {
-                try SMAppService.mainApp.register()
+                try agent.register()
             } else {
-                try SMAppService.mainApp.unregister()
+                try agent.unregister()
             }
             lastError = nil
             log.notice("Open at login \(enabled ? "on" : "off", privacy: .public)")
@@ -46,6 +58,19 @@ final class LoginItem {
             log.error("Couldn't change Open at login: \(error.localizedDescription, privacy: .public)")
         }
         refresh()
+    }
+
+    /// Earlier versions registered the app itself as the login item, which can't relaunch
+    /// it after a crash. Moves that over to the agent, once.
+    func migrateFromAppLoginItem() {
+        guard isInstalledCopy, SMAppService.mainApp.status == .enabled else { return }
+        do {
+            try SMAppService.mainApp.unregister()
+            log.notice("Moved Open at login from the app login item to the launch agent")
+        } catch {
+            log.error("Couldn't remove the old login item: \(error.localizedDescription, privacy: .public)")
+        }
+        setEnabled(true)
     }
 
     func openLoginItemsSettings() {

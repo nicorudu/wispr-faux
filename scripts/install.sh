@@ -5,7 +5,8 @@
 #   scripts/install.sh --login   ...and turn on Open Dictate at Login
 #
 # Run it again after pulling or changing code. Only one Dictate may run at a time
-# (two would both react to the hotkey), so any running copy is quit first.
+# (two would both react to the hotkey), so any running copy is quit first; Dictate
+# quits cleanly on SIGTERM, so its launch agent doesn't relaunch it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -34,7 +35,11 @@ if [[ -d /Applications/Dictate.app ]]; then
 fi
 cp -R "$built" /Applications/
 
-if [[ "${1:-}" == "--login" ]]; then
+agent="gui/$(id -u)/com.example.dictate.agent"
+if launchctl print "$agent" >/dev/null 2>&1; then
+    # Start it through the launch agent, so launchd relaunches it if it ever crashes.
+    launchctl kickstart "$agent"
+elif [[ "${1:-}" == "--login" ]]; then
     open /Applications/Dictate.app --args -EnableOpenAtLogin YES
 else
     open /Applications/Dictate.app

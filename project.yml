@@ -30,6 +30,14 @@ targets:
     platform: macOS
     sources:
       - path: Dictate
+        excludes:
+          - "LaunchAgents/**"
+      # The launch agent that opens Dictate at login and relaunches it after a crash.
+      - path: Dictate/LaunchAgents/com.example.dictate.agent.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchAgents
     dependencies:
       - package: DictationKit
         product: DictationKit

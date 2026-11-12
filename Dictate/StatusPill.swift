@@ -121,7 +121,12 @@ struct StatusPillView: View {
                 ProgressView()
                     .controlSize(.small)
                     .tint(.white)
-                Text("Transcribing")
+                if controller.transcription.status == .loading {
+                    // After a restart or macOS update, preparing the model can take minutes.
+                    Text("Loading speech model, one moment")
+                } else {
+                    Text("Transcribing")
+                }
                 Text("esc to cancel")
                     .foregroundStyle(.white.opacity(0.5))
             case .notice(let notice):

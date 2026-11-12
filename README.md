@@ -29,6 +29,18 @@ Packages/DictationKit/       Core modules, each testable on its own
   HistoryKit                 Last 100 transcripts, on disk            (Step 6, done)
 ```
 
+## Everyday use
+
+Install the Release build in /Applications and have it open at login:
+
+```bash
+scripts/install.sh --login
+```
+
+Run `scripts/install.sh` again after changing or pulling code. It builds Release, quits any running Dictate (two copies would both react to the hotkey), replaces /Applications/Dictate.app, and launches it. Permissions carry over because the bundle ID and signing identity stay the same, and the Whisper model doesn't need recompiling.
+
+**Settings → General → Open Dictate at login** turns the login item on or off (System Settings → General → Login Items shows it too). Only the installed copy can turn it on, so a development build never becomes the login item. When running a development build from Xcode or `build/`, quit the installed Dictate first.
+
 ## Build and run
 
 ```bash

@@ -9,6 +9,28 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
+                Toggle("Open Dictate at login", isOn: Binding(
+                    get: { controller.loginItem.isEnabled },
+                    set: { controller.loginItem.setEnabled($0) }
+                ))
+                .disabled(!controller.loginItem.isInstalledCopy)
+                if controller.loginItem.needsApproval {
+                    Button("Allow in Login Items…", action: controller.loginItem.openLoginItemsSettings)
+                }
+            } header: {
+                Text("General")
+            } footer: {
+                Group {
+                    if let error = controller.loginItem.lastError {
+                        Text(error)
+                    } else if !controller.loginItem.isInstalledCopy {
+                        Text("This is a development build. Install Dictate with scripts/install.sh and turn this on in the installed copy.")
+                    }
+                }
+                .foregroundStyle(.secondary)
+            }
+
+            Section {
                 ForEach(HotkeyTrigger.allCases) { trigger in
                     Toggle(trigger.displayName, isOn: binding(for: trigger))
                         // At least one trigger stays on.
@@ -28,7 +50,8 @@ struct SettingsView: View {
             }
 
             Section("Transcription") {
-                LabeledContent("Engine", value: "On-device (WhisperKit, Step 5)")
+                LabeledContent("Model", value: controller.transcription.model.displayName)
+                LabeledContent("Runs", value: "On this Mac (WhisperKit, Neural Engine)")
                 LabeledContent("Capture format", value: "\(Int(AudioFormat.sampleRate / 1000)) kHz mono")
             }
 
@@ -48,6 +71,7 @@ struct SettingsView: View {
             // Menu-bar-only apps don't come to the front on their own.
             NSApp.activate()
             controller.refreshNow()
+            controller.loginItem.refresh()
         }
     }
 

@@ -30,6 +30,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !controller.permissions.allGranted {
             showSetup()
         }
+        // `scripts/install.sh --login` launches the installed copy with this set.
+        if UserDefaults.standard.bool(forKey: "EnableOpenAtLogin"), !controller.loginItem.isEnabled {
+            controller.loginItem.setEnabled(true)
+        }
         #if DEBUG
         // `open Dictate.app --args -DebugRecordSeconds 3` records once at launch.
         let seconds = UserDefaults.standard.double(forKey: "DebugRecordSeconds")

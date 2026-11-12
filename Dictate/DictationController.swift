@@ -74,6 +74,7 @@ final class DictationController {
     }
 
     let permissions = PermissionsManager()
+    let loginItem = LoginItem()
 
     /// The last 100 transcripts, kept on disk; backs Paste Last and the Recent menu.
     let history = HistoryStore(

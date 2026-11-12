@@ -27,7 +27,8 @@ xcodebuild -project WisprFaux.xcodeproj -scheme WisprFaux -configuration Release
 quit_app() {
     if pgrep -x "$1" >/dev/null; then
         echo "Quitting the running $1…"
-        pkill -TERM -x "$1"
+        # It may have exited since pgrep saw it (e.g. after launchctl bootout); that's fine.
+        pkill -TERM -x "$1" || true
         for _ in $(seq 1 40); do pgrep -x "$1" >/dev/null || break; sleep 0.25; done
         sleep 1 # LaunchServices needs a moment after a quit, or `open` fails with -600.
     fi

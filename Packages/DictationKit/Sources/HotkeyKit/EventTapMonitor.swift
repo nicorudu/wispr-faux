@@ -129,6 +129,11 @@ public final class EventTapMonitor: @unchecked Sendable {
         yield(shared.withLock { $0.matcher.setTriggers(triggers) })
     }
 
+    /// While on, Esc cancels even with no key held (see `ShortcutMatcher.escapeCancels`).
+    public func setEscapeCancels(_ on: Bool) {
+        shared.withLock { $0.matcher.escapeCancels = on }
+    }
+
     public var stats: TapStats {
         shared.withLock { $0.stats }
     }

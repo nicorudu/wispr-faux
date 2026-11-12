@@ -27,9 +27,8 @@ public enum WAVEncoder {
 
         data.append(contentsOf: Array("data".utf8))
         data.appendLittleEndian(UInt32(dataSize))
-        for sample in samples {
-            data.appendLittleEndian(UInt16(bitPattern: int16(sample)))
-        }
+        let pcm = samples.map { int16($0).littleEndian }
+        pcm.withUnsafeBytes { data.append(contentsOf: $0) }
         return data
     }
 

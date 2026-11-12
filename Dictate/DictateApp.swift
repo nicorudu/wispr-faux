@@ -22,9 +22,11 @@ struct DictateApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let controller = DictationController()
     private lazy var setupWindow = SetupWindowController(controller: controller)
+    private lazy var pill = StatusPillController(controller: controller)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         controller.start()
+        pill.start()
         if !controller.permissions.allGranted {
             showSetup()
         }

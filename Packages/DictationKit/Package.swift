@@ -46,6 +46,7 @@ let package = Package(
             dependencies: [
                 "AudioKit",
                 "TranscriptionKit",
+                "ContextKit",
                 "HotkeyKit",
                 "PostProcessKit",
                 "HistoryKit",

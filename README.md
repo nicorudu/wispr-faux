@@ -3,7 +3,7 @@
 Push-to-talk dictation for macOS: hold a key, speak, release, and the text appears in the focused app.
 The roadmap, architecture and step-by-step plan are in [BUILD_PLAN.md](BUILD_PLAN.md).
 
-**Status:** Step 2 (permissions + hotkey) done. Step 3 (paste spike) is built: *Paste Test String* in the menu pastes into the app in front and then puts the clipboard back. Checking it across the app matrix below is still to do. Step 4 (audio spike) done: holding the hotkey records 16 kHz mono that plays back cleanly (checked on a fifine USB mic), and the menu plays the last recording back. Step 5 (transcription) done: each recording is transcribed on-device with Whisper large-v3 turbo, accurately on real dictation, and the text shows in the menu about 0.9 s after release. Pasting it into the focused app comes in Step 6.
+**Status:** Steps 1–6 done: hold Control, speak, release, and the text is pasted into the focused app, transcribed on-device with Whisper large-v3 turbo. Checked in Notes and the Claude app. Next is Step 7: use it for a week and fix what comes up.
 
 Dictate is a personal tool that runs entirely on this Mac: no accounts, no cloud, no network calls.
 
@@ -20,13 +20,13 @@ project.yml                  XcodeGen spec (source of truth for Dictate.xcodepro
 Dictate/                     App target: menu bar, settings, setup window, DictationController
 Packages/DictationKit/       Core modules, each testable on its own
   HotkeyKit                  CGEventTap, shortcut matching, keycodes  (Step 2, done)
-  InsertionKit               Clipboard backup/restore + Cmd+V         (Step 3, built)
-  AudioKit                   AVAudioEngine → 16 kHz mono, levels, WAV (Step 4, built)
-  TranscriptionKit           Whisper on Core ML (WhisperKit 1.1.1)    (Step 5, built)
+  InsertionKit               Clipboard backup/restore + Cmd+V         (Step 3, done)
+  AudioKit                   AVAudioEngine → 16 kHz mono, levels, WAV (Step 4, done)
+  TranscriptionKit           Whisper on Core ML (WhisperKit 1.1.1)    (Step 5, done)
   DictateBench               `dictate-bench`: compares models on audio files
-  PostProcessKit             Rule-based transcript cleanup
-  ContextKit                 Focused-field info via Accessibility     (Step 6)
-  HistoryKit                 Recent transcripts
+  PostProcessKit             Cleanup: spacing, non-speech markers     (Step 6, done)
+  ContextKit                 Focused-field kind via Accessibility     (Step 6, done)
+  HistoryKit                 Last 100 transcripts, on disk            (Step 6, done)
 ```
 
 ## Build and run
@@ -82,16 +82,31 @@ log stream --style compact --predicate 'subsystem == "com.example.dictate"'
 
 Debug builds add a **Debug** menu: *Simulate Event-Tap Timeout on Next Key* stalls the tap for 2.5 s on your next key press so macOS disables it; the log should then show it re-enabled, and the hotkey keeps working.
 
-## Paste test (Step 3)
+## Dictating (Step 6)
 
-1. Copy something to check the clipboard survives: some text, or an image (e.g. select all in Preview and press ⌘C).
-2. Click into a text field in the app you're testing.
-3. Menu bar icon → **Paste Test String**. A line like `Dictate paste test 6:20:15 PM · café ✓` should appear.
-4. Open the menu again. It shows how long the paste took and whether the clipboard came back, e.g. *Clipboard restored ✓ (image, 3 types, 1.2 MB)*. Press ⌘V somewhere to confirm.
+Hold Control, speak, release. A pill at the bottom of the screen shows *Listening* with a level meter, then *Transcribing*, and the text is pasted where the cursor is. Control + Space keeps listening hands-free until the next Control press.
 
-Check each app: TextEdit, Notes, a Safari textarea, a Chrome textarea, Slack, VS Code, Terminal, Mail.
+- **Esc** cancels while recording or transcribing; nothing is pasted.
+- **Password fields** are never pasted into: the text is copied instead and the pill says so.
+- **No text field focused** (a button, a list, the desktop), or you switched apps while it was transcribing: the text is copied and the pill says *press ⌘V to paste*. Where Accessibility can't tell what's focused (Slack, VS Code and other Electron apps), Dictate pastes; a stray ⌘V does no harm.
+- **Spacing:** when the character before the cursor isn't a space, a space goes first, so consecutive dictations don't run together. Only that one character is read.
+- **Silence:** taps under 250 ms are ignored; quiet recordings show *Didn't hear anything*; Whisper's "[BLANK_AUDIO]"-style output, and its invented "Thank you." on near-silence, are dropped.
+- **Menu:** *Paste Last Transcript*, *Copy Last Transcript*, and *Recent* (click an entry to copy it; *Clear History* at the bottom).
+- **History:** the last 100 transcripts, in `~/Library/Application Support/Dictate/history.json`, readable only by your user. No audio is stored (Debug builds keep the latest recording as a temporary WAV, deleted on quit).
 
-How it works (`InsertionKit`):
+Measured with an M-Track 2X2 into Notes and the Claude app: release to pasted in 1.2–1.7 s for 12–27 s dictations, mostly transcription (it grows with the number of words; about 0.7 s for a sentence). The log line for each paste has the app, the kind of field and the timings, never the words:
+
+```bash
+log stream --style compact --predicate 'subsystem == "com.example.dictate" AND category == "Paste"'
+```
+
+Not done yet:
+
+- Paste-last and copy-last shortcuts (⌃⌘V, ⌃⌘C in the plan) would clash with Control as the dictation key; they're menu items for now.
+- Dictating mid-sentence keeps Whisper's capital first letter ("…I think Maybe").
+- Long dictations wait for the whole transcription after release. Transcribing while you speak (v0.4 streaming) would cut that.
+
+### How pasting works (`InsertionKit`)
 
 - Every item and type on the clipboard is backed up first. Unlike the teardown, PDF, RTFD and sound data are kept so the clipboard comes back identical; only file promises are skipped.
 - The text goes on the clipboard marked `org.nspasteboard.TransientType`, so clipboard managers don't record it.
@@ -100,13 +115,11 @@ How it works (`InsertionKit`):
 
 The log (`log stream` command above) records each paste's timing and backup size. It never records clipboard contents.
 
-## Recording test (Step 4)
+## Recording (Step 4)
 
-1. Hold the hotkey (Control), say a sentence, release. The setup window's *Try it* row shows a live level bar while you hold.
-2. Open the menu. It shows the last recording, e.g. *Last recording: 3.2 s · loudest −18 dBFS · would transcribe*, and the mic it came from with how long after the key press the first sample arrived.
-3. **Play Last Recording** plays it back; **Show Recording in Finder** reveals the WAV.
+The setup window's *Try it* row shows a live level bar while you hold the hotkey. Debug builds also have a **Debug** menu showing the last recording, e.g. *Last recording: 3.2 s · loudest −18 dBFS · would transcribe*, the mic it came from and how long after the key press the first sample arrived, with **Play Last Recording** and **Show Recording in Finder**.
 
-Only the last recording is kept, as a 16 kHz mono 16-bit WAV in `$TMPDIR/Dictate/last-recording.wav`. It's overwritten on every recording and deleted when Dictate quits. Check it from Terminal:
+Debug builds keep only the last recording, as a 16 kHz mono 16-bit WAV in `$TMPDIR/Dictate/last-recording.wav`, overwritten on every recording and deleted when Dictate quits. Release builds store no audio. Check it from Terminal:
 
 ```bash
 afinfo "$TMPDIR/Dictate/last-recording.wav"
@@ -148,7 +161,7 @@ Dictate transcribes with [WhisperKit](https://github.com/argmaxinc/WhisperKit) (
 
 - **Model:** Whisper large-v3 turbo, compressed (`openai_whisper-large-v3-v20240930_turbo_632MB`, 646 MB). Models live in `~/Library/Application Support/Dictate/Models`.
 - **Getting it:** if the model isn't there, the menu shows a **Download** button. That download, and `dictate-bench download`, are the only things in Dictate that use the network. Loading and transcribing work entirely from those files, and a model only counts as downloaded once its tokenizer is there too (otherwise WhisperKit would fetch it at load time).
-- **Using it:** hold the hotkey, speak, release, and open the menu. It shows the transcript, how long it took, and how long after release the text was ready. **Copy Last Transcript** puts it on the clipboard. Recordings the gate skips (too short or quiet) aren't transcribed. The log records timings and length, never the words.
+- **Status:** the menu shows the model's state while it's loading, downloading or missing; Debug builds show the last dictation's timings in the Debug menu. The log records timings and length, never the words.
 - **Another model:** `defaults write com.example.dictate transcription.model openai_whisper-small.en`, then relaunch. `defaults delete com.example.dictate transcription.model` goes back to the default.
 
 Measured on the M4 Mac mini (16 GB):
@@ -163,7 +176,7 @@ Measured on the M4 Mac mini (16 GB):
 
 Turbo is the default: it punctuates better, loads quickly once compiled, and stays under a second for a typical dictation. Debug and Release builds transcribe at the same speed, since the work runs on the Neural Engine.
 
-**Load time:** the first load compiles the model for the Neural Engine, which takes about 2 minutes; the menu says *Loading…* meanwhile, and a dictation made then waits for it. macOS caches the result, so later launches take a few seconds. The cache is shared and limited: it's rebuilt after a macOS update, and loading the same model from another program (such as `dictate-bench`) can push Dictate's copy out, costing one more 2-minute load.
+**Load time:** the first load compiles the model for the Neural Engine, which takes about 2 minutes; the menu says *Loading…* meanwhile, and a dictation made then waits for it. macOS caches the result, so later launches take a few seconds. Rebuilding Dictate keeps the cache (2.4 s after a rebuild). The cache is shared and limited, though: it's rebuilt after a macOS update, and loading the same model from another program (such as `dictate-bench`) can push Dictate's copy out, costing one more 2-minute load.
 
 ### Comparing models
 

@@ -32,6 +32,7 @@ public struct KeyInput: Sendable, Equatable {
 /// - Trigger + Space → `.handsFreeToggled`; recording continues after the trigger is
 ///   released, and the next trigger press ends it with `.pushToTalkReleased`.
 /// - Esc during a session → `.cancel` (Esc is only swallowed while a session is active).
+///   While `escapeCancels` is set (the app is still transcribing), Esc also cancels.
 /// - Any other key or a mouse click while the trigger is held means it's being used as
 ///   a modifier (⌃C, Ctrl-click, Fn+Delete…) → `.cancel`, and the event passes through.
 ///
@@ -65,6 +66,10 @@ public struct ShortcutMatcher: Sendable {
     /// Keys whose key-down was swallowed; their autorepeats and key-up are swallowed too,
     /// so apps never see half a keystroke.
     private var swallowedKeys: Set<CGKeyCode> = []
+    /// Set by the app after the trigger is released, while it's still working on the
+    /// dictation: the next Esc sends `.cancel` (and is swallowed) even though no key is
+    /// held. Clears itself after one Esc, so a second Esc reaches the app as usual.
+    public var escapeCancels = false
 
     public init(triggers: Set<HotkeyTrigger>) {
         self.triggers = triggers
@@ -148,8 +153,9 @@ public struct ShortcutMatcher: Sendable {
         if code == KeyCode.globe, triggers.contains(.fn) {
             return swallowKey(code)
         }
-        if code == KeyCode.escape, phase != .idle {
+        if code == KeyCode.escape, phase != .idle || escapeCancels {
             phase = .idle
+            escapeCancels = false
             return swallowKey(code, events: [.cancel])
         }
         if code == KeyCode.space, phase == .holding {

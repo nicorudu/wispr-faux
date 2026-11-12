@@ -89,6 +89,22 @@ struct ShortcutMatcherTests {
         #expect(matcher.phase == .idle)
     }
 
+    /// After release, while the app is transcribing, Esc still cancels: once.
+    @Test func escapeCancelsWhileTheAppIsBusy() {
+        var matcher = ShortcutMatcher(triggers: [.leftControl, .rightControl])
+        #expect(matcher.handle(control(true)).events == [.pushToTalkPressed])
+        #expect(matcher.handle(control(false)).events == [.pushToTalkReleased])
+
+        matcher.escapeCancels = true
+        #expect(matcher.handle(keyDown(KeyCode.escape)) == .init(swallow: true, events: [.cancel]))
+        #expect(matcher.handle(keyUp(KeyCode.escape)) == .init(swallow: true))
+        #expect(!matcher.escapeCancels)
+
+        // The next Esc is the app's again.
+        #expect(matcher.handle(keyDown(KeyCode.escape)) == .pass)
+        #expect(matcher.handle(keyUp(KeyCode.escape)) == .pass)
+    }
+
     @Test func escapeCancelsHandsFree() {
         var matcher = ShortcutMatcher(triggers: [.fn])
 

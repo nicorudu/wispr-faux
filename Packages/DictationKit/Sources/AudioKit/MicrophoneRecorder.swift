@@ -16,6 +16,8 @@ public struct Recording: Sendable {
     public var engineStartDuration: Duration
     /// How long `stop` kept the mic on after the release, waiting for the audio up to it.
     public var tailWait: Duration
+    /// Stopping the engine and draining the resampler, after the tail wait.
+    public var stopDuration: Duration
     /// Frames in the first tap buffer, at the device's sample rate.
     public var tapBufferFrames: Int?
     /// Peak of each input channel before the mix to mono (linear). Tells a quiet mic apart
@@ -165,8 +167,10 @@ public actor MicrophoneRecorder {
             try? await Task.sleep(for: .milliseconds(5))
         }
         let tailWait = ContinuousClock.now - waitStarted
+        let stopStarted = ContinuousClock.now
         session.tearDown()
         let captured = session.capture.finish()
+        let stopDuration = ContinuousClock.now - stopStarted
 
         let firstSampleDelay = captured.firstHostTime.map { first in
             Duration.seconds(AVAudioTime.seconds(forHostTime: first) - AVAudioTime.seconds(forHostTime: session.requestedAt))
@@ -178,6 +182,7 @@ public actor MicrophoneRecorder {
             firstSampleDelay: firstSampleDelay,
             engineStartDuration: session.engineStartDuration,
             tailWait: tailWait,
+            stopDuration: stopDuration,
             tapBufferFrames: captured.tapBufferFrames,
             inputChannelPeaks: captured.inputChannelPeaks,
             wasTruncated: captured.wasTruncated,

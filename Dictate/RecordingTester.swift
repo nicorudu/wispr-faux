@@ -4,10 +4,9 @@ import AVFAudio
 import Observation
 import os
 
-/// Step 4 spike: saves the last recording as a temporary WAV so it can be played back and
-/// checked, and reports its length, level and mic start-up delay in the menu. Only the
-/// latest recording is kept, and it's deleted when Dictate quits. Dictation itself keeps
-/// audio in memory; this goes away once transcription is wired up in Step 6.
+/// Logs each recording's length, level and mic start-up delay (never its audio). Debug
+/// builds also keep the latest recording as a temporary WAV, deleted on quit, so it can
+/// be played back from the Debug menu. Release builds store no audio.
 @MainActor
 @Observable
 final class RecordingTester {
@@ -56,7 +55,11 @@ final class RecordingTester {
         }
         detail = deviceLine
 
+        #if DEBUG
         let saved = save(recording.samples)
+        #else
+        let saved = false
+        #endif
 
         log.notice("""
             Recorded \(seconds, privacy: .public) s (held \(heldFor.map(Self.ms) ?? -1, privacy: .public) ms): \
@@ -72,6 +75,7 @@ final class RecordingTester {
             input channel peaks \(recording.inputChannelPeaks.map { Self.dBFS(Decibels.fromAmplitude($0)) }.joined(separator: " / "), privacy: .public)]. \
             Engine start \(Self.ms(recording.engineStartDuration), privacy: .public) ms, \
             tail wait \(Self.ms(recording.tailWait), privacy: .public) ms, \
+            engine stop \(Self.ms(recording.stopDuration), privacy: .public) ms, \
             first sample \(recording.firstSampleDelay.map(Self.ms) ?? -1, privacy: .public) ms after key. \
             Truncated \(recording.wasTruncated, privacy: .public), interrupted \(recording.wasInterrupted, privacy: .public), \
             conversion error \(recording.conversionError ?? "none", privacy: .public). \

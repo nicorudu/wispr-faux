@@ -4,11 +4,9 @@ import Observation
 import os
 import TranscriptionKit
 
-/// Owns the Whisper model: loads it at launch, transcribes recordings, and reports what
-/// happened for the menu. Everything runs on this Mac; the only network use is
-/// `download()`, when the user clicks Download in the menu.
-///
-/// Step 5 shows the transcript in the menu. Step 6 cleans it up and pastes it.
+/// Owns the Whisper model: loads it at launch and transcribes recordings. Everything runs
+/// on this Mac; the only network use is `download()`, when the user clicks Download in
+/// the menu.
 @MainActor
 @Observable
 final class TranscriptionService {
@@ -32,10 +30,6 @@ final class TranscriptionService {
     private(set) var model: WhisperModel
     private(set) var status: ModelStatus
     private(set) var isTranscribing = false
-    private(set) var lastResult: Result?
-    /// Why the last recording wasn't transcribed, e.g. "too short".
-    private(set) var lastSkipReason: String?
-    private(set) var lastError: String?
 
     @ObservationIgnored private var transcriber: WhisperKitTranscriber
     @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "Transcription")
@@ -98,21 +92,13 @@ final class TranscriptionService {
         if case .downloading = status { status = .downloading(fraction: fraction) }
     }
 
-    func skip(_ verdict: SpeechGate.Verdict) {
-        lastSkipReason = switch verdict {
-        case .tooShort: "too short"
-        case .tooQuiet: "too quiet"
-        case .speech: nil
-        }
-    }
+    /// Whether the model is on disk (it may still be loading).
+    var isAvailable: Bool { store.isDownloaded(model) }
 
-    /// Transcribes `recording`. `releasedAt` is when the hotkey went up.
-    func transcribe(_ recording: Recording, releasedAt: ContinuousClock.Instant) async {
-        lastSkipReason = nil
-        guard store.isDownloaded(model) else {
-            lastError = "Download the model first"
-            return
-        }
+    /// Transcribes `recording`; `releasedAt` is when the hotkey went up. Returns nil and
+    /// logs the error on failure.
+    func transcribe(_ recording: Recording, releasedAt: ContinuousClock.Instant) async -> Result? {
+        guard isAvailable else { return nil }
         isTranscribing = true
         defer { isTranscribing = false }
         do {
@@ -123,8 +109,6 @@ final class TranscriptionService {
                 processingDuration: transcription.processingDuration,
                 releaseToText: .now - releasedAt
             )
-            lastResult = result
-            lastError = nil
             // The log gets timings and length only, never the words.
             log.notice("""
                 Transcribed \(Self.ms(result.audioDuration), privacy: .public) ms of audio \
@@ -133,16 +117,11 @@ final class TranscriptionService {
                 release to text \(Self.ms(result.releaseToText), privacy: .public) ms; \
                 \(result.text.count, privacy: .public) characters, model \(self.model.id, privacy: .public)
                 """)
+            return result
         } catch {
-            lastError = error.localizedDescription
             log.error("Transcription failed: \(error.localizedDescription, privacy: .public)")
+            return nil
         }
-    }
-
-    func copyLastTranscript() {
-        guard let text = lastResult?.text, !text.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
     }
 
     // MARK: - Menu text
@@ -166,23 +145,11 @@ final class TranscriptionService {
         "Download \(model.displayName) (\(ByteCountFormatter.string(fromByteCount: model.downloadSize, countStyle: .file)))"
     }
 
-    var lastTranscriptLines: [String] {
-        if isTranscribing { return ["Transcribing…"] }
-        if let lastError { return ["Transcription: \(lastError)"] }
-        if let lastSkipReason { return ["Not transcribed: \(lastSkipReason)"] }
-        guard let result = lastResult else { return [] }
-        let text = result.text.isEmpty ? "(no words heard)" : "“\(Self.truncated(result.text, to: 90))”"
-        return [
-            text,
-            "\(Self.seconds(result.processingDuration)) s to transcribe \(Self.seconds(result.audioDuration)) s · text \(Self.seconds(result.releaseToText)) s after release",
-        ]
+    var isReady: Bool {
+        if case .ready = status { true } else { false }
     }
 
     // MARK: - Formatting
-
-    private static func truncated(_ text: String, to length: Int) -> String {
-        text.count > length ? text.prefix(length - 1) + "…" : text
-    }
 
     nonisolated private static func seconds(_ duration: Duration) -> String {
         (duration / .seconds(1)).formatted(.number.precision(.fractionLength(2)))

@@ -31,6 +31,23 @@ public struct TextCleaner: Sendable {
         return normalized.isEmpty || silenceArtifacts.contains(normalized)
     }
 
+    /// Whisper's descriptions of non-speech, e.g. "[BLANK_AUDIO]", "(silence)", "[Music]".
+    /// Never something the user said, so these are always dropped.
+    public static func isNonSpeechMarker(_ transcript: String) -> Bool {
+        let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = text.first, let last = text.last, text.count >= 2 else { return false }
+        return (first == "[" && last == "]") || (first == "(" && last == ")")
+    }
+
+    /// Whether text inserted right after `previous` needs a space first, so a second
+    /// dictation doesn't run into the end of the first ("…today.Next"). No space at the
+    /// start of a line, after whitespace, or after an opening bracket or quote.
+    public static func needsLeadingSpace(after previous: Character?) -> Bool {
+        guard let previous else { return false }
+        if previous.isWhitespace || previous.isNewline { return false }
+        return !"([{\"'“‘/-–—".contains(previous)
+    }
+
     static let silenceArtifacts: Set<String> = [
         "[blank_audio]",
         "(silence)",

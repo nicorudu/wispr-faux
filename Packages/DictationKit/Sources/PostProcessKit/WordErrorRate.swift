@@ -11,7 +11,8 @@ public enum WordErrorRate {
         return Double(editDistance(ref, hyp)) / Double(ref.count)
     }
 
-    static func words(_ text: String) -> [String] {
+    /// Lowercase words with punctuation stripped (inner apostrophes kept).
+    public static func words(_ text: String) -> [String] {
         text.lowercased()
             .components(separatedBy: .whitespacesAndNewlines)
             .map { word in

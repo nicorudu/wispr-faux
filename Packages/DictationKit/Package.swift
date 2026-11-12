@@ -13,6 +13,7 @@ let package = Package(
                 "HotkeyKit",
                 "AudioKit",
                 "TranscriptionKit",
+                "CleanupKit",
                 "PostProcessKit",
                 "ContextKit",
                 "InsertionKit",
@@ -26,6 +27,11 @@ let package = Package(
         // On-device Whisper on Core ML. Pinned: model loading and the offline guarantees in
         // TranscriptionKit depend on its internals (download paths, tokenizer lookup).
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", exact: "1.1.1"),
+        // On-device language models (MLX, Apple GPU) for cleaning up stumbles. Pinned to the
+        // last release that builds with Swift 6.0 (Xcode 16); 2.31+ needs Swift 6.1.
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", exact: "2.30.6"),
+        // Hub downloads for those models; the same 1.1.x line mlx-swift-lm uses.
+        .package(url: "https://github.com/huggingface/swift-transformers.git", .upToNextMinor(from: "1.1.6")),
     ],
     targets: [
         .target(name: "HotkeyKit"),
@@ -36,7 +42,19 @@ let package = Package(
             name: "TranscriptionKit",
             dependencies: [.product(name: "WhisperKit", package: "WhisperKit")]
         ),
-        .executableTarget(name: "DictateBench", dependencies: ["AudioKit", "TranscriptionKit"]),
+        .target(
+            name: "CleanupKit",
+            dependencies: [
+                "PostProcessKit",
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "Hub", package: "swift-transformers"),
+            ]
+        ),
+        .executableTarget(
+            name: "DictateBench",
+            dependencies: ["AudioKit", "TranscriptionKit", "CleanupKit", "PostProcessKit"]
+        ),
         .target(name: "PostProcessKit"),
         .target(name: "ContextKit"),
         .target(name: "InsertionKit", dependencies: ["HotkeyKit"]),
@@ -46,6 +64,7 @@ let package = Package(
             dependencies: [
                 "AudioKit",
                 "TranscriptionKit",
+                "CleanupKit",
                 "ContextKit",
                 "HotkeyKit",
                 "PostProcessKit",

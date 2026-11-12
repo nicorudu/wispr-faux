@@ -1,10 +1,12 @@
 import AudioKit
+import CleanupKit
 import HotkeyKit
 import SwiftUI
 
 struct SettingsView: View {
     let controller: DictationController
     let openSetup: @MainActor () -> Void
+    @State private var keyDraft = ""
 
     var body: some View {
         Form {
@@ -49,6 +51,8 @@ struct SettingsView: View {
                 LabeledContent("Cancel", value: "Esc")
             }
 
+            cleanupSection
+
             Section("Transcription") {
                 LabeledContent("Model", value: controller.transcription.model.displayName)
                 LabeledContent("Runs", value: "On this Mac (WhisperKit, Neural Engine)")
@@ -72,6 +76,87 @@ struct SettingsView: View {
             NSApp.activate()
             controller.refreshNow()
             controller.loginItem.refresh()
+        }
+    }
+
+    private var cleanup: CleanupService { controller.cleanup }
+
+    private var cleanupSection: some View {
+        Section {
+            Picker("Fix stumbles", selection: Binding(get: { cleanup.mode }, set: { cleanup.setMode($0) })) {
+                ForEach(CleanupService.Mode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+
+            switch cleanup.mode {
+            case .off:
+                EmptyView()
+            case .onDevice:
+                switch cleanup.localStatus {
+                case .notDownloaded, .failed:
+                    Button(cleanup.downloadTitle, action: cleanup.downloadLocalModel)
+                default:
+                    EmptyView()
+                }
+            case .cloud:
+                Picker("Provider", selection: Binding(get: { cleanup.provider }, set: { cleanup.setProvider($0) })) {
+                    ForEach(CloudProvider.all) { provider in
+                        Text("\(provider.displayName) · \(provider.costNote)").tag(provider)
+                    }
+                }
+                LabeledContent("API key") {
+                    HStack {
+                        SecureField(cleanup.hasCloudKey ? "Saved in Keychain" : "Paste key", text: $keyDraft)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 170)
+                        Button("Save") {
+                            cleanup.saveCloudKey(keyDraft)
+                            keyDraft = ""
+                        }
+                        .disabled(keyDraft.isEmpty)
+                    }
+                }
+                HStack {
+                    Button("Get a Key…", action: cleanup.openKeysPage)
+                    if cleanup.hasCloudKey {
+                        Button("Remove Key") { cleanup.saveCloudKey("") }
+                    }
+                }
+            }
+
+            if cleanup.mode != .off {
+                HStack(alignment: .firstTextBaseline) {
+                    Button("Test", action: cleanup.test)
+                        .disabled(cleanup.isTesting)
+                    if let result = cleanup.testResult {
+                        Text(result)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+        } header: {
+            Text("Clean up stumbles")
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                if let status = cleanup.statusLine {
+                    Text(status)
+                }
+                Text(footerText)
+            }
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private var footerText: String {
+        switch cleanup.mode {
+        case .off:
+            "Removes “um”, repeated words and self-corrections (“Tuesday, no wait, Wednesday”) before pasting."
+        case .onDevice:
+            "Runs only when a dictation has a stumble, adding about half a second. Nothing leaves this Mac."
+        case .cloud:
+            "Runs only when a dictation has a stumble. That dictation's text goes to \(cleanup.provider.displayName); audio never leaves this Mac. If the reply is slow or odd, the text is pasted as spoken."
         }
     }
 

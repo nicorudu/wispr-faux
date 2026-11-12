@@ -1,5 +1,6 @@
 import AppKit
 import AudioKit
+import CleanupKit
 import ContextKit
 import HistoryKit
 import HotkeyKit
@@ -111,6 +112,8 @@ final class DictationController {
 
     /// On-device Whisper: loads at launch, transcribes each recording.
     let transcription = TranscriptionService()
+    /// Fixes stumbles ("Tuesday, no wait, Wednesday") on this Mac or in the cloud.
+    let cleanup = CleanupService()
     @ObservationIgnored private let speechGate = SpeechGate()
 
     @ObservationIgnored private let monitor: EventTapMonitor
@@ -139,6 +142,7 @@ final class DictationController {
     func start() {
         guard eventTask == nil else { return }
         transcription.loadIfDownloaded()
+        cleanup.start()
         Task { recentTranscripts = await history.all }
         log.notice("""
             Started. Microphone: \(String(describing: self.permissions.microphone), privacy: .public), \
@@ -292,15 +296,20 @@ final class DictationController {
 
         Task {
             let result = await transcription.transcribe(recording, releasedAt: releasedAt)
+            // Cleanup runs before Esc stops cancelling, so Esc covers it too.
+            let prepared = if let result { await prepare(result, recording: recording) } else { Prepared.nothingHeard }
             finishTranscribing(id)
             guard !cancelledIDs.contains(id) else {
                 cancelledIDs.remove(id)
                 return
             }
             if state == .transcribing { state = .inserting }
-            if let result {
-                await deliver(result, recording: recording, targetApp: targetApp, releasedAt: releasedAt)
-            } else {
+            switch (result, prepared) {
+            case (let result?, .text(let text)):
+                await deliver(text, result: result, targetApp: targetApp, releasedAt: releasedAt)
+            case (_?, .nothingHeard):
+                showNotice(Notice(text: "Didn't catch that", systemImage: "questionmark.bubble"))
+            case (nil, _):
                 showNotice(Notice(text: "Transcription failed", systemImage: "exclamationmark.triangle", isWarning: true))
             }
             // A new recording may have started meanwhile; leave its state alone.
@@ -314,32 +323,56 @@ final class DictationController {
         monitor.setEscapeCancels(false)
     }
 
-    private func deliver(
-        _ result: TranscriptionService.Result,
-        recording: Recording,
-        targetApp: pid_t?,
-        releasedAt: ContinuousClock.Instant
-    ) async {
+    private struct PreparedText {
+        /// What to paste.
+        var text: String
+        /// The transcript before stumble cleanup.
+        var spoken: String
+        var cleanup: CleanupOutcome?
+    }
+
+    private enum Prepared {
+        case text(PreparedText)
+        case nothingHeard
+    }
+
+    /// Tidies the transcript, drops non-speech, and fixes stumbles when cleanup is on.
+    private func prepare(_ result: TranscriptionService.Result, recording: Recording) async -> Prepared {
         let text = cleaner.clean(result.text)
         // Whisper describes silence ("[BLANK_AUDIO]") or invents a polite phrase for it.
         let quiet = recording.levels.loudestWindowDBFS < -40
         if text.isEmpty || TextCleaner.isNonSpeechMarker(text) || (quiet && TextCleaner.isLikelySilenceArtifact(text)) {
             pasteLog.notice("Dropped a non-speech transcript (\(text.count, privacy: .public) characters)")
-            showNotice(Notice(text: "Didn't catch that", systemImage: "questionmark.bubble"))
-            return
+            return .nothingHeard
         }
+        let outcome = await cleanup.clean(text)
+        return .text(PreparedText(text: outcome?.text ?? text, spoken: text, cleanup: outcome))
+    }
 
+    private func deliver(
+        _ prepared: PreparedText,
+        result: TranscriptionService.Result,
+        targetApp: pid_t?,
+        releasedAt: ContinuousClock.Instant
+    ) async {
+        let text = prepared.text
         let field = fieldReader.read()
-        await history.add(TranscriptRecord(text: text, appBundleID: field.appBundleID, appName: field.appName))
+        await history.add(TranscriptRecord(
+            text: text,
+            appBundleID: field.appBundleID,
+            appName: field.appName,
+            original: text == prepared.spoken ? nil : prepared.spoken
+        ))
         recentTranscripts = await history.all
 
         let switchedApps = targetApp != nil && NSWorkspace.shared.frontmostApplication?.processIdentifier != targetApp
         let outcome = await insertOrCopy(text, into: field, switchedApps: switchedApps)
         let releaseToPaste = ContinuousClock.now - releasedAt
 
+        let cleanupNote = prepared.cleanup.map { " → \(Self.seconds($0.duration)) s cleanup (\(CleanupService.describe($0.kind)))" } ?? ""
         lastTiming = """
-            \(Self.seconds(result.audioDuration)) s audio → \(Self.seconds(result.processingDuration)) s to transcribe → \
-            \(outcome) \(Self.seconds(releaseToPaste)) s after release
+            \(Self.seconds(result.audioDuration)) s audio → \(Self.seconds(result.processingDuration)) s to transcribe\
+            \(cleanupNote) → \(outcome) \(Self.seconds(releaseToPaste)) s after release
             """
         pasteLog.notice("""
             \(outcome, privacy: .public) \(text.count, privacy: .public) characters into \
@@ -347,7 +380,8 @@ final class DictationController {
             \(field.subrole.map { "/" + $0 } ?? "", privacy: .public), \(String(describing: field.kind), privacy: .public)). \
             Release to \(outcome, privacy: .public): \(Self.milliseconds(releaseToPaste), privacy: .public) ms \
             (transcribe \(Self.milliseconds(result.processingDuration), privacy: .public) ms \
-            for \(Self.milliseconds(result.audioDuration), privacy: .public) ms of audio)
+            for \(Self.milliseconds(result.audioDuration), privacy: .public) ms of audio\
+            \(prepared.cleanup.map { ", cleanup \(Self.milliseconds($0.duration)) ms: \(CleanupService.describe($0.kind))" } ?? "", privacy: .public))
             """)
     }
 

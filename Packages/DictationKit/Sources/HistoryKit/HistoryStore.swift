@@ -7,19 +7,23 @@ public struct TranscriptRecord: Sendable, Equatable, Identifiable, Codable {
     public let appBundleID: String?
     /// The app the text was meant for, e.g. "Slack".
     public let appName: String?
+    /// The transcript as spoken, when cleanup changed it.
+    public let original: String?
 
     public init(
         id: UUID = UUID(),
         text: String,
         createdAt: Date = Date(),
         appBundleID: String? = nil,
-        appName: String? = nil
+        appName: String? = nil,
+        original: String? = nil
     ) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
         self.appBundleID = appBundleID
         self.appName = appName
+        self.original = original
     }
 }
 

@@ -3,7 +3,7 @@
 Push-to-talk dictation for macOS: hold a key, speak, release, and the text appears in the focused app.
 The roadmap, architecture and step-by-step plan are in [BUILD_PLAN.md](BUILD_PLAN.md).
 
-**Status:** Steps 1–6 done: hold Control, speak, release, and the text is pasted into the focused app, transcribed on-device with Whisper large-v3 turbo. Checked in Notes and the Claude app. Next is Step 7: use it for a week and fix what comes up.
+**Status:** Steps 1–6 done: hold Control, speak, release, and the text is pasted into the focused app, transcribed on-device with Whisper large-v3 turbo. Stumbles ("Tuesday, no wait, Wednesday") are cleaned up by a small model on this Mac, or optionally a cloud model. Step 7 is under way: use it for a week and fix what comes up.
 
 Dictate is a personal tool that runs entirely on this Mac: no accounts, no cloud, no network calls.
 
@@ -24,7 +24,8 @@ Packages/DictationKit/       Core modules, each testable on its own
   AudioKit                   AVAudioEngine → 16 kHz mono, levels, WAV (Step 4, done)
   TranscriptionKit           Whisper on Core ML (WhisperKit 1.1.1)    (Step 5, done)
   DictateBench               `dictate-bench`: compares models on audio files
-  PostProcessKit             Cleanup: spacing, non-speech markers     (Step 6, done)
+  PostProcessKit             Spacing, non-speech markers, word errors (Step 6, done)
+  CleanupKit                 Stumble cleanup: gate, guard, MLX/cloud  (done)
   ContextKit                 Focused-field kind via Accessibility     (Step 6, done)
   HistoryKit                 Last 100 transcripts, on disk            (Step 6, done)
 ```
@@ -114,9 +115,30 @@ log stream --style compact --predicate 'subsystem == "com.example.dictate" AND c
 
 Not done yet:
 
-- Paste-last and copy-last shortcuts (⌃⌘V, ⌃⌘C in the plan) would clash with Control as the dictation key; they're menu items for now.
+- Paste-last and copy-last shortcuts (⌃⌘V, ⌃⌘C in the plan) are menu items for now; the hotkey layer can learn them as Dictate's own commands.
 - Dictating mid-sentence keeps Whisper's capital first letter ("…I think Maybe").
 - Long dictations wait for the whole transcription after release. Transcribing while you speak (v0.4 streaming) would cut that.
+
+## Cleaning up stumbles
+
+Whisper writes down exactly what was said, stumbles included. **Settings → Clean up stumbles** fixes them before pasting: fillers ("um", "uh"), repeated words, broken-off phrases, and self-corrections ("Tuesday, no wait, Wednesday" → "Wednesday"; "send it to Mark, I mean Mike" → "send it to Mike").
+
+- **Only when needed.** A transcript goes to the model only when it shows a stumble: a filler, "I mean", "sorry", "no wait", "wait", "actually", "scratch that", a doubled word, or a dash or ellipsis. Clean dictations are pasted as Whisper wrote them, with no extra delay.
+- **On this Mac** (the default): Qwen3 1.7B (`mlx-community/Qwen3-1.7B-4bit`, 0.98 GB) on the GPU through [MLX](https://github.com/ml-explore/mlx-swift-lm). It lives in `~/Library/Application Support/Dictate/Models/llm`; Settings has a Download button when it's missing. About 0.55 s per cleanup, and nothing leaves the Mac.
+- **Cloud**: any provider with the common chat-completions API. Presets: **GLM-4.7-Flash** from Z.ai (free with an account, about one request per second) and **DeepSeek** (paid, about $0.0001 per cleanup). Paste the API key in Settings; it's stored in the macOS keychain. Only the text of dictations with a stumble is sent; audio never leaves the Mac. Both providers are in China, and free tiers may use requests for training.
+- **Safety.** The model's reply is checked before it's pasted. Cleanup only removes words, so a reply that brings in words that weren't said, gets longer, adds lines or drops almost everything is rejected: that's a model answering a dictated question, following a dictated instruction, or rewording. A reply slower than 3 s (4 s for cloud) or an error also falls back. In every one of those cases the transcript is pasted as spoken. Esc cancels during cleanup too.
+- **History** keeps the original wording of any dictation that cleanup changed.
+- **Test** in Settings runs a sample stumble through the current engine and shows the result and timing.
+
+Measured on the M4 Mac mini with `dictate-bench cleanup` (10 stumbles plus 6 traps: a question, a dictated instruction, a prompt injection, a "sorry" and an "actually" that aren't corrections, and a long clean paragraph). A case passes when the pasted text is within 15% of the expected text:
+
+| Model (on this Mac) | Passed | Per cleanup | Download |
+|---|---|---|---|
+| LFM2.5 1.2B | 10/16 (once flipped a meaning) | 0.40 s | 0.64 GB |
+| **Qwen3 1.7B** | **14/16** | **0.55 s** | 0.98 GB |
+| Qwen3 4B Instruct 2507 | 14/16 | 1.26 s | 2.28 GB |
+
+Every model wrote a haiku when told to "write a haiku", and the guard rejected all of them. `mlx-swift-lm` is pinned to 2.30.6, the last release that builds with Swift 6.0 (Xcode 16); newer releases support newer models (Qwen3.5, Gemma 4) but need Xcode 26.
 
 ### How pasting works (`InsertionKit`)
 
@@ -188,27 +210,47 @@ Measured on the M4 Mac mini (16 GB):
 
 Turbo is the default: it punctuates better, loads quickly once compiled, and stays under a second for a typical dictation. Debug and Release builds transcribe at the same speed, since the work runs on the Neural Engine.
 
-**Load time:** the first load compiles the model for the Neural Engine, which takes about 2 minutes; the menu says *Loading…* meanwhile, and a dictation made then waits for it. macOS caches the result, so later launches take a few seconds. Rebuilding Dictate keeps the cache (2.4 s after a rebuild). The cache is shared and limited, though: it's rebuilt after a macOS update, and loading the same model from another program (such as `dictate-bench`) can push Dictate's copy out, costing one more 2-minute load.
+**Load time:** the first load compiles the model for the Neural Engine, which takes 2–4 minutes; the menu says *Loading…* meanwhile, and a dictation made then waits for it. macOS caches the result, so later launches take a few seconds. Rebuilding Dictate keeps the cache (2.4 s after a rebuild). The cache is shared and limited, though: it's rebuilt after a macOS update, and loading the same model from another program (such as `dictate-bench`) can push Dictate's copy out, costing one more 2-minute load. macOS also deletes it when the disk runs low (it did at 3 GB free), so keep a few GB free.
 
 ### Comparing models
 
+`dictate-bench` is built with `xcodebuild`, which compiles MLX's Metal shaders (plain `swift build` doesn't):
+
 ```bash
-cd Packages/DictationKit && swift build -c release --product dictate-bench
+cd Packages/DictationKit && xcodebuild -scheme dictate-bench -configuration Release -destination "platform=macOS,arch=arm64" -derivedDataPath .build-xcode build -quiet
+```
+
+Whisper models:
+
+```bash
+.build-xcode/Build/Products/Release/dictate-bench models
 ```
 
 ```bash
-.build/release/dictate-bench models
+.build-xcode/Build/Products/Release/dictate-bench download small.en
 ```
 
 ```bash
-.build/release/dictate-bench download small.en
-```
-
-```bash
-.build/release/dictate-bench run turbo_632MB clip1.wav clip2.aiff --runs 3
+.build-xcode/Build/Products/Release/dictate-bench run turbo_632MB clip1.wav clip2.aiff --runs 3
 ```
 
 Any audio file works. A `.txt` file with the same name next to it is used as the reference transcript, and the run reports the word error rate. `say -o clip.aiff -f clip.txt` makes test clips with known text.
+
+Cleanup engines (16 built-in cases; `cleanup-models` lists the choices):
+
+```bash
+.build-xcode/Build/Products/Release/dictate-bench cleanup-download qwen3-1.7b
+```
+
+```bash
+.build-xcode/Build/Products/Release/dictate-bench cleanup local qwen3-1.7b
+```
+
+```bash
+DICTATE_CLEANUP_KEY=your-key .build-xcode/Build/Products/Release/dictate-bench cleanup cloud zai-glm-4.7-flash
+```
+
+Loading the Whisper model from `dictate-bench` can push Dictate's compiled copy out of macOS's cache (see Load time above).
 
 ## Signing and permissions
 

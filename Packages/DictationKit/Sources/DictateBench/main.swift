@@ -1,6 +1,7 @@
 import AudioKit
 import AVFAudio
 import Foundation
+import PostProcessKit
 import TranscriptionKit
 
 // Benchmarks Whisper models on audio files (BUILD_PLAN.md Step 5).
@@ -19,6 +20,10 @@ let usage = """
       dictate-bench models
       dictate-bench download <model>
       dictate-bench run <model> <audio file>... [--runs N]
+      dictate-bench cleanup-models
+      dictate-bench cleanup-download <model>
+      dictate-bench cleanup local <model>
+      DICTATE_CLEANUP_KEY=… dictate-bench cleanup cloud <provider>
 
     models: \(WhisperModel.all.map(\.id).joined(separator: ", "))
     """
@@ -149,6 +154,9 @@ case "run":
     if totalWords > 0 {
         print("\n  overall WER: \(String(format: "%.1f", totalErrors / Double(totalWords) * 100))% of \(totalWords) words")
     }
+
+case "cleanup-models", "cleanup-download", "cleanup":
+    await CleanupBench.run(arguments)
 
 default:
     fail(usage)

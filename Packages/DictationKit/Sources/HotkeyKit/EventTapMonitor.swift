@@ -18,7 +18,7 @@ public enum EventTapError: Error, LocalizedError {
     case tapCreationFailed
 
     public var errorDescription: String? {
-        "macOS refused to create the keyboard event tap. Dictate needs Accessibility and Input Monitoring access."
+        "macOS refused to create the keyboard event tap. Wispr Faux needs Accessibility and Input Monitoring access."
     }
 }
 
@@ -50,7 +50,7 @@ public final class EventTapMonitor: @unchecked Sendable {
 
     /// State shared between the tap thread and the main actor.
     private let shared: OSAllocatedUnfairLock<Shared>
-    private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "EventTap")
+    private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Wispr Faux", category: "EventTap")
 
     /// The running tap. Only touched by `start()` / `stop()` on the main actor.
     private var session: TapSession?
@@ -102,7 +102,7 @@ public final class EventTapMonitor: @unchecked Sendable {
         let thread = Thread { [session] in
             session.run(ready: ready)
         }
-        thread.name = "Dictate.EventTap"
+        thread.name = "WisprFaux.EventTap"
         thread.qualityOfService = .userInteractive
         thread.start()
         ready.wait()

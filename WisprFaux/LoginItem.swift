@@ -3,22 +3,22 @@ import Observation
 import os
 import ServiceManagement
 
-/// "Open Dictate at login", through a launch agent registered with `SMAppService`
+/// "Open Wispr Faux at login", through a launch agent registered with `SMAppService`
 /// (listed in System Settings → General → Login Items). The agent, in
-/// Contents/Library/LaunchAgents, starts Dictate at login and relaunches it if it ever
+/// Contents/Library/LaunchAgents, starts Wispr Faux at login and relaunches it if it ever
 /// crashes; a normal quit isn't undone. Only the copy in /Applications may register, so a
 /// development build never becomes the login item.
 @MainActor
 @Observable
 final class LoginItem {
-    static let agentLabel = "com.example.dictate.agent"
+    static let agentLabel = "com.example.wisprfaux.agent"
 
     private(set) var isEnabled = false
-    /// The user turned Dictate off in System Settings → Login Items; only they can undo it.
+    /// The user turned Wispr Faux off in System Settings → Login Items; only they can undo it.
     private(set) var needsApproval = false
     private(set) var lastError: String?
 
-    @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "LoginItem")
+    @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Wispr Faux", category: "LoginItem")
 
     private var agent: SMAppService { SMAppService.agent(plistName: "\(Self.agentLabel).plist") }
 

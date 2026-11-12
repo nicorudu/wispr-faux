@@ -35,7 +35,7 @@ struct KeychainItem {
         if status == errSecItemNotFound {
             var item = query
             item[kSecValueData as String] = data
-            item[kSecAttrLabel as String] = "Dictate: \(account)"
+            item[kSecAttrLabel as String] = "Wispr Faux: \(account)"
             return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
         }
         return status == errSecSuccess

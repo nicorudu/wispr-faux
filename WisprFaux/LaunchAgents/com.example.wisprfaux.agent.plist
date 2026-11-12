@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Starts Dictate at login and relaunches it if it ever crashes. A normal quit (from the
+  Starts Wispr Faux at login and relaunches it if it ever crashes. A normal quit (from the
   menu, or when the Mac shuts down) exits with status 0, so it isn't relaunched.
   Registered by LoginItem through SMAppService; lives in Contents/Library/LaunchAgents.
 -->
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>com.example.dictate.agent</string>
+	<string>com.example.wisprfaux.agent</string>
 	<key>BundleProgram</key>
-	<string>Contents/MacOS/Dictate</string>
+	<string>Contents/MacOS/Wispr Faux</string>
 	<key>AssociatedBundleIdentifiers</key>
 	<array>
-		<string>com.example.dictate</string>
+		<string>com.example.wisprfaux</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>

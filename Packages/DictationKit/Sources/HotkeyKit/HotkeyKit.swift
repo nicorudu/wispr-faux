@@ -19,7 +19,7 @@ public enum KeyCode {
     public static let ansiV: CGKeyCode = 9
 }
 
-/// Written into `eventSourceUserData` on every event Dictate synthesizes, so the
+/// Written into `eventSourceUserData` on every event Wispr Faux synthesizes, so the
 /// event tap can recognise and ignore our own keystrokes (BUILD_PLAN.md §5, gotcha 8).
 public let syntheticEventTag: Int64 = 0x4449_4354 // "DICT"
 

@@ -11,7 +11,7 @@ protocol PasteKeySender {
 }
 
 /// Posts synthetic key presses at the session tap, each tagged with `syntheticEventTag`
-/// so Dictate's own event tap lets them through untouched (BUILD_PLAN.md §5, gotcha 8).
+/// so Wispr Faux's own event tap lets them through untouched (BUILD_PLAN.md §5, gotcha 8).
 @MainActor
 public struct KeyPoster: PasteKeySender {
     public init() {}

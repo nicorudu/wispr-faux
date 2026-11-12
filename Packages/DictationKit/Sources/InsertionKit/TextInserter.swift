@@ -36,7 +36,7 @@ public final class TextInserter {
         public var errorDescription: String? {
             switch self {
             case .busy: "Another paste is still in progress."
-            case .notAllowedToPostEvents: "Dictate needs Accessibility access to paste."
+            case .notAllowedToPostEvents: "Wispr Faux needs Accessibility access to paste."
             case .pasteboardWriteFailed: "Couldn't put the text on the clipboard."
             }
         }
@@ -79,12 +79,12 @@ public final class TextInserter {
     private let restoreDelay: Duration
     private var pending: PendingRestore?
     private var nextRestoreID = 0
-    private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "Insertion")
+    private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Wispr Faux", category: "Insertion")
 
     private struct PendingRestore {
         let id: Int
         let snapshot: PasteboardSnapshot
-        /// The pasteboard's `changeCount` right after Dictate wrote its text.
+        /// The pasteboard's `changeCount` right after Wispr Faux wrote its text.
         let changeCount: Int
         let task: Task<Void, Never>
     }
@@ -118,7 +118,7 @@ public final class TextInserter {
         let start = ContinuousClock.now
 
         // 1. Back up. If an earlier restore is still waiting and nobody has copied since,
-        //    the pasteboard holds Dictate's previous text: keep the original backup.
+        //    the pasteboard holds Wispr Faux's previous text: keep the original backup.
         let backup: PasteboardSnapshot
         let reused: Bool
         if let pending, pasteboard.changeCount == pending.changeCount {

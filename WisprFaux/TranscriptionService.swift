@@ -32,9 +32,9 @@ final class TranscriptionService {
     private(set) var isTranscribing = false
 
     @ObservationIgnored private var transcriber: WhisperKitTranscriber
-    @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "Transcription")
+    @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Wispr Faux", category: "Transcription")
 
-    /// Pick another model with `defaults write com.example.dictate transcription.model <id>`.
+    /// Pick another model with `defaults write com.example.wisprfaux transcription.model <id>`.
     static let modelDefaultsKey = "transcription.model"
     static let defaultModel = WhisperModel.largeV3TurboCompressed
 

@@ -18,12 +18,12 @@ final class RecordingTester {
     private(set) var wavURL: URL?
 
     static let fileURL = FileManager.default.temporaryDirectory
-        .appendingPathComponent("Dictate", isDirectory: true)
+        .appendingPathComponent("Wispr Faux", isDirectory: true)
         .appendingPathComponent("last-recording.wav")
 
     @ObservationIgnored private var player: AVAudioPlayer?
     @ObservationIgnored private let gate = SpeechGate()
-    @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Dictate", category: "Audio")
+    @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Wispr Faux", category: "Audio")
 
     func didRecord(_ recording: Recording, heldFor: Duration?) {
         let seconds = Self.seconds(recording.duration)

@@ -1,7 +1,7 @@
 import Foundation
 import Hub
 
-/// Where on-device cleanup models live: `~/Library/Application Support/Dictate/Models/llm`.
+/// Where on-device cleanup models live: `~/Library/Application Support/Wispr Faux/Models/llm`.
 ///
 /// Like Whisper's `ModelStore`, `download(_:)` is the only network use and runs only when
 /// asked; loading reads these files and nothing else.
@@ -14,7 +14,7 @@ public struct CleanupModelStore: Sendable {
 
     public static var standard: CleanupModelStore {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return CleanupModelStore(directory: support.appending(path: "Dictate/Models/llm", directoryHint: .isDirectory))
+        return CleanupModelStore(directory: support.appending(path: "Wispr Faux/Models/llm", directoryHint: .isDirectory))
     }
 
     /// The model's files, laid out the way the Hub client downloads them.
@@ -55,5 +55,6 @@ public struct CleanupModelStore: Sendable {
         }
     }
 
+    /// Kept from when the app was called Dictate, so models downloaded then still count.
     static let marker = ".dictate-complete"
 }

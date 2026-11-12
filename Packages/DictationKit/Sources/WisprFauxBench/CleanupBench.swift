@@ -2,15 +2,15 @@ import CleanupKit
 import Foundation
 import PostProcessKit
 
-/// `dictate-bench cleanup …`: scores cleanup engines on stumbles and traps.
+/// `wisprfaux-bench cleanup …`: scores cleanup engines on stumbles and traps.
 ///
-///   dictate-bench cleanup-models
-///   dictate-bench cleanup-download <model>
-///   dictate-bench cleanup local <model>
-///   DICTATE_CLEANUP_KEY=… dictate-bench cleanup cloud <provider>
+///   wisprfaux-bench cleanup-models
+///   wisprfaux-bench cleanup-download <model>
+///   wisprfaux-bench cleanup local <model>
+///   WISPRFAUX_CLEANUP_KEY=… wisprfaux-bench cleanup cloud <provider>
 ///
 /// Every case goes to the model (the stumble gate is bypassed), and each result is the
-/// text Dictate would paste after the guard. A case passes when it is within 15% word
+/// text Wispr Faux would paste after the guard. A case passes when it is within 15% word
 /// error of the expected text.
 enum CleanupBench {
     struct Case {
@@ -88,7 +88,7 @@ enum CleanupBench {
             switch rest.first {
             case "local":
                 let model = localModel(named: rest.dropFirst().first)
-                guard store.isDownloaded(model) else { fail("Run: dictate-bench cleanup-download \(model.id)") }
+                guard store.isDownloaded(model) else { fail("Run: wisprfaux-bench cleanup-download \(model.id)") }
                 let local = LocalEngine(model: model, store: store)
                 do {
                     print("\(model.id): loaded in \(seconds(try await local.load())) s")
@@ -100,13 +100,13 @@ enum CleanupBench {
                 guard let id = rest.dropFirst().first, let provider = CloudProvider.named(id) else {
                     fail("Cloud providers: \(CloudProvider.all.map(\.id).joined(separator: ", "))")
                 }
-                guard let key = ProcessInfo.processInfo.environment["DICTATE_CLEANUP_KEY"], !key.isEmpty else {
-                    fail("Set DICTATE_CLEANUP_KEY to the provider's API key.")
+                guard let key = ProcessInfo.processInfo.environment["WISPRFAUX_CLEANUP_KEY"], !key.isEmpty else {
+                    fail("Set WISPRFAUX_CLEANUP_KEY to the provider's API key.")
                 }
                 engine = CloudEngine(provider: provider, apiKey: key)
                 print(provider.displayName)
             default:
-                fail("usage: dictate-bench cleanup local <model> | cleanup cloud <provider>")
+                fail("usage: wisprfaux-bench cleanup local <model> | cleanup cloud <provider>")
             }
             await score(engine)
 

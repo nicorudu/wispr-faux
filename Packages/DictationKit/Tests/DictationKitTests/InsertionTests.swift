@@ -6,7 +6,7 @@ import Testing
 /// A pasteboard of its own, so tests never touch the user's clipboard.
 @MainActor
 private func withScratchPasteboard(_ body: (NSPasteboard) async throws -> Void) async rethrows {
-    let pasteboard = NSPasteboard(name: .init("com.example.dictate.tests.\(UUID().uuidString)"))
+    let pasteboard = NSPasteboard(name: .init("com.example.wisprfaux.tests.\(UUID().uuidString)"))
     defer { pasteboard.releaseGlobally() }
     try await body(pasteboard)
 }

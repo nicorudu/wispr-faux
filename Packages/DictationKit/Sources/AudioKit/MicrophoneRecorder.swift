@@ -65,7 +65,7 @@ public actor MicrophoneRecorder {
     /// The longest `stop` keeps the mic on waiting for the last buffer.
     public static let tailTimeout: Duration = .milliseconds(300)
 
-    private nonisolated let queue = DispatchSerialQueue(label: "Dictate.MicrophoneRecorder", qos: .userInitiated)
+    private nonisolated let queue = DispatchSerialQueue(label: "WisprFaux.MicrophoneRecorder", qos: .userInitiated)
     public nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
 
     private nonisolated let meter = LevelMeter()

@@ -62,7 +62,7 @@ struct HistoryStoreTests {
     }
 
     private func scratchFile() -> URL {
-        FileManager.default.temporaryDirectory.appending(path: "dictate-history-\(UUID().uuidString)/history.json")
+        FileManager.default.temporaryDirectory.appending(path: "wisprfaux-history-\(UUID().uuidString)/history.json")
     }
 
     @Test func survivesARestart() async throws {

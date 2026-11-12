@@ -6,24 +6,24 @@ import TranscriptionKit
 
 // Benchmarks Whisper models on audio files (BUILD_PLAN.md Step 5).
 //
-//   swift run -c release dictate-bench models
-//   swift run -c release dictate-bench download <model>
-//   swift run -c release dictate-bench run <model> <audio file>... [--runs N]
+//   swift run -c release wisprfaux-bench models
+//   swift run -c release wisprfaux-bench download <model>
+//   swift run -c release wisprfaux-bench run <model> <audio file>... [--runs N]
 //
 // For `run`, a .txt file next to an audio file (same name) is its reference transcript,
 // used to report word error rate. Models live where the app finds them
-// (~/Library/Application Support/Dictate/Models); `download` is the only command that
+// (~/Library/Application Support/Wispr Faux/Models); `download` is the only command that
 // uses the network.
 
 let usage = """
     usage:
-      dictate-bench models
-      dictate-bench download <model>
-      dictate-bench run <model> <audio file>... [--runs N]
-      dictate-bench cleanup-models
-      dictate-bench cleanup-download <model>
-      dictate-bench cleanup local <model>
-      DICTATE_CLEANUP_KEY=… dictate-bench cleanup cloud <provider>
+      wisprfaux-bench models
+      wisprfaux-bench download <model>
+      wisprfaux-bench run <model> <audio file>... [--runs N]
+      wisprfaux-bench cleanup-models
+      wisprfaux-bench cleanup-download <model>
+      wisprfaux-bench cleanup local <model>
+      WISPRFAUX_CLEANUP_KEY=… wisprfaux-bench cleanup cloud <provider>
 
     models: \(WhisperModel.all.map(\.id).joined(separator: ", "))
     """
@@ -104,7 +104,7 @@ case "run":
     let model = model(named: arguments.first)
     let files = arguments.dropFirst().map { URL(fileURLWithPath: $0) }
     guard !files.isEmpty else { fail(usage) }
-    guard store.isDownloaded(model) else { fail("\(model.id) isn't downloaded. Run: dictate-bench download \(model.id)") }
+    guard store.isDownloaded(model) else { fail("\(model.id) isn't downloaded. Run: wisprfaux-bench download \(model.id)") }
 
     let transcriber = WhisperKitTranscriber(model: model, store: store)
     print("Model \(model.id)")

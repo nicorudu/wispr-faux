@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct DictateApp: App {
+struct WisprFauxApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
@@ -20,7 +20,11 @@ struct DictateApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let controller = DictationController()
+    let controller: DictationController = {
+        // Before the controller opens the model folders, history and settings.
+        LegacyMigration.run()
+        return DictationController()
+    }()
     private lazy var setupWindow = SetupWindowController(controller: controller)
     private lazy var pill = StatusPillController(controller: controller)
     private var terminationSignal: DispatchSourceSignal?
@@ -40,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller.loginItem.setEnabled(true)
         }
         #if DEBUG
-        // `open Dictate.app --args -DebugRecordSeconds 3` records once at launch.
+        // `open "Wispr Faux.app" --args -DebugRecordSeconds 3` records once at launch.
         let seconds = UserDefaults.standard.double(forKey: "DebugRecordSeconds")
         if seconds > 0 { controller.debugRecord(seconds: seconds) }
         #endif
@@ -54,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupWindow.show()
     }
 
-    /// Only one Dictate may run: two would both react to the hotkey. The copy started by
+    /// Only one Wispr Faux may run: two would both react to the hotkey. The copy started by
     /// the launch agent wins, since launchd relaunches it after a crash; any other copy
     /// is asked to quit. Otherwise a second copy steps aside. Returns false to exit.
     private func claimSingleInstance() -> Bool {
@@ -76,7 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// `scripts/install.sh` and `kill` send SIGTERM. Quit normally instead of dying from
     /// it, so the clipboard is restored and the exit counts as clean: the launch agent
-    /// relaunches Dictate only after a crash.
+    /// relaunches Wispr Faux only after a crash.
     private func quitCleanlyOnTermSignal() {
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)

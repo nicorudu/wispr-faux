@@ -3,7 +3,7 @@ import Foundation
 /// Rule-based cleanup applied to every transcript before insertion (MVP).
 /// LLM formatting via Claude comes later (BUILD_PLAN.md §6).
 public struct TextCleaner: Sendable {
-    /// User-defined find → replace pairs, e.g. `["dictate app": "Dictate"]`.
+    /// User-defined find → replace pairs, e.g. `["whisper faux": "Wispr Faux"]`.
     public var replacements: [String: String]
 
     public init(replacements: [String: String] = [:]) {

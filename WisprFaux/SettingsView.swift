@@ -11,7 +11,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Open Dictate at login", isOn: Binding(
+                Toggle("Open Wispr Faux at login", isOn: Binding(
                     get: { controller.loginItem.isEnabled },
                     set: { controller.loginItem.setEnabled($0) }
                 ))
@@ -26,7 +26,7 @@ struct SettingsView: View {
                     if let error = controller.loginItem.lastError {
                         Text(error)
                     } else if !controller.loginItem.isInstalledCopy {
-                        Text("This is a development build. Install Dictate with scripts/install.sh and turn this on in the installed copy.")
+                        Text("This is a development build. Install Wispr Faux with scripts/install.sh and turn this on in the installed copy.")
                     }
                 }
                 .foregroundStyle(.secondary)

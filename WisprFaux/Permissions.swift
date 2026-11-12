@@ -4,7 +4,7 @@ import AVFoundation
 import CoreGraphics
 import Observation
 
-/// The macOS privacy permissions Dictate needs (BUILD_PLAN.md §3, onboarding).
+/// The macOS privacy permissions Wispr Faux needs (BUILD_PLAN.md §3, onboarding).
 enum Permission: CaseIterable, Identifiable {
     case microphone
     case accessibility
@@ -23,8 +23,8 @@ enum Permission: CaseIterable, Identifiable {
     var explanation: String {
         switch self {
         case .microphone: "Records your voice, only while you hold the dictation key."
-        case .accessibility: "Lets Dictate see the dictation key in any app and paste the text where you're typing."
-        case .inputMonitoring: "Lets Dictate listen for the dictation key while other apps are in front."
+        case .accessibility: "Lets Wispr Faux see the dictation key in any app and paste the text where you're typing."
+        case .inputMonitoring: "Lets Wispr Faux listen for the dictation key while other apps are in front."
         }
     }
 
@@ -152,7 +152,7 @@ final class PermissionsManager {
     /// Permissions whose system prompt was already shown this launch.
     @ObservationIgnored private var prompted: Set<Permission> = []
 
-    /// The first time, shows the system prompt (which also adds Dictate to the list in
+    /// The first time, shows the system prompt (which also adds Wispr Faux to the list in
     /// System Settings). After that macOS stays silent, so open System Settings instead.
     func request(_ permission: Permission) async {
         defer { refresh() }

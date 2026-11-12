@@ -41,6 +41,9 @@ sealed class DictationController : IDisposable
 
     int _dictationCount;
     int? _transcribingId;
+    /// <summary>Transcriptions still running (two can overlap).</summary>
+    int _working;
+    bool _inserting;
     readonly HashSet<int> _cancelledIds = new();
     CancellationTokenSource? _transcriptionCancel;
     Stopwatch? _pressStarted;
@@ -114,6 +117,7 @@ sealed class DictationController : IDisposable
     public void Dispose()
     {
         _poll.Stop();
+        _transcriptionCancel?.Cancel();
         _hook.Dispose();
         _foreground.Dispose();
         _recorder.Cancel();
@@ -135,7 +139,7 @@ sealed class DictationController : IDisposable
                 _pressStarted = Stopwatch.StartNew();
                 _handsFree = false;
                 ClearNotice();
-                SetState(State.Recording);
+                Refresh();
                 // Letting go of Alt alone would open the app's menu bar; a dummy key prevents it.
                 if (_hook.HeldTrigger == HotkeyTrigger.RightAlt) TextInserter.SendMaskKey();
                 await StartRecordingAsync();
@@ -172,11 +176,14 @@ sealed class DictationController : IDisposable
                     _cancelledIds.Add(id);
                     _transcriptionCancel?.Cancel();
                     FinishTranscribing(id);
-                    SetState(State.Idle);
                     ShowNotice("Cancelled");
                 }
                 break;
         }
+        // The matcher clears Esc-cancels after any Esc and sets it after any release; keep it
+        // in step with whether a transcription can still be cancelled.
+        _hook.SetEscapeCancels(_transcribingId is not null);
+        Refresh();
     }
 
     async Task StartRecordingAsync()
@@ -184,7 +191,8 @@ sealed class DictationController : IDisposable
         if (MicrophonePrivacy.IsBlocked())
         {
             Log.Info("Audio", "Not recording: Windows blocks desktop apps from the microphone");
-            SetState(State.Idle);
+            _pressStarted = null;
+            Refresh();
             ShowNotice("Microphone access is off in Windows Settings → Privacy", warning: true);
             return;
         }
@@ -192,14 +200,12 @@ sealed class DictationController : IDisposable
         {
             var device = AudioRecorder.Resolve(_settings.MicrophoneDevice, _settings.MicrophoneName);
             await _recorder.StartAsync(device);
-            // Released while the mic was starting: the release handler already ran.
-            if (CurrentState != State.Recording) _recorder.Cancel();
         }
         catch (Exception e)
         {
             Log.Error("Audio", "Recording failed to start: " + e.Message);
-            SetState(State.Idle);
             _pressStarted = null;
+            Refresh();
             ShowNotice("Couldn't open the microphone: " + e.Message, warning: true);
         }
     }
@@ -208,13 +214,15 @@ sealed class DictationController : IDisposable
     {
         _pressStarted = null;
         _handsFree = false;
-        SetState(State.Idle);
+        Refresh();
     }
 
     // MARK: Transcribing and pasting
 
     void StartTranscription(Recording recording, int id, Stopwatch releasedAt)
     {
+        // Until a transcription starts there's nothing for Esc to cancel.
+        _hook.SetEscapeCancels(false);
         switch (_gate.Verdict(recording.Duration, recording.Levels))
         {
             case GateVerdict.TooShort:
@@ -230,33 +238,52 @@ sealed class DictationController : IDisposable
         }
 
         var targetProcess = Native.ProcessId(Native.GetForegroundWindow());
-        SetState(State.Transcribing);
         _transcribingId = id;
         _hook.SetEscapeCancels(true);
+        _working++;
         var cancel = new CancellationTokenSource();
         _transcriptionCancel = cancel;
+        Refresh();
         _ = RunAsync();
 
         async Task RunAsync()
         {
-            TranscriptionService.Result? result = null;
-            Prepared? prepared = null;
             try
             {
-                result = await Transcription.TranscribeAsync(recording.Samples, _settings.Language, cancel.Token);
-                // Cleanup runs before Esc stops cancelling, so Esc covers it too.
-                if (result is not null) prepared = await PrepareAsync(result, recording, cancel.Token);
-            }
-            catch (OperationCanceledException) { }
-            FinishTranscribing(id);
-            if (_cancelledIds.Remove(id)) return;
+                TranscriptionService.Result? result = null;
+                Prepared? prepared = null;
+                try
+                {
+                    result = await Transcription.TranscribeAsync(recording.Samples, _settings.Language, cancel.Token);
+                    // Cleanup runs before Esc stops cancelling, so Esc covers it too.
+                    if (result is not null) prepared = await PrepareAsync(result, recording, cancel.Token);
+                }
+                catch (OperationCanceledException) { }
+                FinishTranscribing(id);
+                if (_cancelledIds.Remove(id) || cancel.IsCancellationRequested) return;
 
-            if (CurrentState == State.Transcribing) SetState(State.Inserting);
-            if (result is null) ShowNotice("Transcription failed", warning: true);
-            else if (prepared is null) ShowNotice("Didn't catch that");
-            else await DeliverAsync(prepared, result, targetProcess, releasedAt);
-            // A new recording may have started meanwhile; leave its state alone.
-            if (CurrentState is State.Inserting or State.Transcribing) SetState(State.Idle);
+                if (result is null) ShowNotice("Transcription failed", warning: true);
+                else if (prepared is null) ShowNotice("Didn't catch that");
+                else
+                {
+                    _inserting = true;
+                    Refresh();
+                    await DeliverAsync(prepared, result, targetProcess, releasedAt);
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error("App", "Dictation failed: " + e);
+                ShowNotice("Something went wrong (see the log)", warning: true);
+            }
+            finally
+            {
+                FinishTranscribing(id);
+                _cancelledIds.Remove(id);
+                _working--;
+                _inserting = false;
+                Refresh();
+            }
         }
     }
 
@@ -307,24 +334,24 @@ sealed class DictationController : IDisposable
         switch (field.Kind)
         {
             case FieldKind.Secure:
-                CopyToClipboard(text);
-                ShowNotice("Password field: not pasted. Copied instead", warning: true);
+                if (CopyToClipboard(text))
+                    ShowNotice("Password field: not pasted. Copied instead", warning: true);
                 return "copied";
             case FieldKind.NotText:
-                CopyToClipboard(text);
-                ShowNotice("No text field. Copied: press Ctrl+V to paste");
+                if (CopyToClipboard(text))
+                    ShowNotice("No text field. Copied: press Ctrl+V to paste");
                 return "copied";
         }
         if (switchedApps)
         {
-            CopyToClipboard(text);
-            ShowNotice("You switched apps. Copied: press Ctrl+V to paste");
+            if (CopyToClipboard(text))
+                ShowNotice("You switched apps. Copied: press Ctrl+V to paste");
             return "copied";
         }
         if (field.ProcessId != 0 && Native.IsElevated(field.ProcessId) && !Native.IsCurrentProcessElevated())
         {
-            CopyToClipboard(text);
-            ShowNotice("That app runs as administrator, so Windows blocks pasting. Copied: press Ctrl+V", warning: true);
+            if (CopyToClipboard(text))
+                ShowNotice("That app runs as administrator, so Windows blocks pasting. Copied: press Ctrl+V", warning: true);
             return "copied";
         }
 
@@ -338,8 +365,8 @@ sealed class DictationController : IDisposable
         }
         catch (Exception e)
         {
-            CopyToClipboard(text);
-            ShowNotice($"Couldn't paste ({e.Message}). Copied instead", warning: true);
+            if (CopyToClipboard(text))
+                ShowNotice($"Couldn't paste ({e.Message}). Copied instead", warning: true);
             Log.Error("Paste", "Paste failed: " + e.Message);
             return "copied";
         }
@@ -360,8 +387,7 @@ sealed class DictationController : IDisposable
 
     public void Copy(TranscriptRecord record)
     {
-        CopyToClipboard(record.Text);
-        ShowNotice("Copied");
+        if (CopyToClipboard(record.Text)) ShowNotice("Copied");
     }
 
     public void ClearHistory()
@@ -370,7 +396,14 @@ sealed class DictationController : IDisposable
         Changed?.Invoke();
     }
 
-    static void CopyToClipboard(string text) => Win32Clipboard.SetText(text, transient: false);
+    /// <summary>Copies the text; on failure says so in the pill and returns false.</summary>
+    bool CopyToClipboard(string text)
+    {
+        if (Win32Clipboard.SetText(text, transient: false)) return true;
+        Log.Error("Paste", "Couldn't copy: another app had the clipboard open");
+        ShowNotice("Couldn't use the clipboard (another app has it open). Use Copy Last Transcript in the tray menu", warning: true);
+        return false;
+    }
 
     // MARK: Settings
 
@@ -394,8 +427,16 @@ sealed class DictationController : IDisposable
 
     // MARK: Pill and state
 
-    void SetState(State state)
+    /// <summary>
+    /// Works out what to show from what's actually going on: recording wins, then a
+    /// transcription or paste in progress (several can overlap), otherwise idle.
+    /// </summary>
+    void Refresh()
     {
+        var state = _pressStarted is not null ? State.Recording
+            : _inserting ? State.Inserting
+            : _working > 0 ? State.Transcribing
+            : State.Idle;
         if (CurrentState == state) return;
         CurrentState = state;
         UpdatePill();

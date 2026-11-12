@@ -134,7 +134,11 @@ sealed class InputHook : IDisposable
     {
         lock (_lock)
         {
-            if (_matcher.HeldTrigger is not { } held) return;
+            if (_matcher.HeldTrigger is not { } held)
+            {
+                _upPolls = 0;
+                return;
+            }
             var down = (Native.GetAsyncKeyState(held.VirtualKey()) & 0x8000) != 0;
             _upPolls = down ? 0 : _upPolls + 1;
             // Two polls in a row, so a momentary glitch never cuts a dictation short.
@@ -161,7 +165,9 @@ sealed class InputHook : IDisposable
         Decision decision;
         lock (_lock)
         {
-            decision = _matcher.Handle(new KeyInput(kind, (int)info.vkCode, (int)info.scanCode));
+            // The async key state isn't updated for this event yet: down already means a repeat.
+            var repeat = kind == KeyKind.KeyDown && (Native.GetAsyncKeyState((int)info.vkCode) & 0x8000) != 0;
+            decision = _matcher.Handle(new KeyInput(kind, (int)info.vkCode, (int)info.scanCode, repeat));
             Publish(decision.Events);
         }
         NoteDuration(started);
@@ -174,7 +180,8 @@ sealed class InputHook : IDisposable
         {
             Interlocked.Exchange(ref _lastCallbackTicks, Environment.TickCount64);
             var message = (int)wParam;
-            if (message is Native.WM_LBUTTONDOWN or Native.WM_RBUTTONDOWN or Native.WM_MBUTTONDOWN or Native.WM_XBUTTONDOWN)
+            if (message is Native.WM_LBUTTONDOWN or Native.WM_RBUTTONDOWN or Native.WM_MBUTTONDOWN or Native.WM_XBUTTONDOWN
+                or Native.WM_MOUSEWHEEL or Native.WM_MOUSEHWHEEL)
             {
                 lock (_lock) Publish(_matcher.Handle(new KeyInput(KeyKind.MouseDown, 0)).Events);
             }

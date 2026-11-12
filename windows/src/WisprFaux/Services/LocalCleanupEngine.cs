@@ -111,5 +111,11 @@ sealed class LocalCleanupEngine : ICleanupEngine, IDisposable
         }
     }
 
-    public void Dispose() => _weights?.Dispose();
+    /// <summary>Waits (briefly) for a cleanup in progress before freeing the model.</summary>
+    public void Dispose()
+    {
+        var idle = _gate.Wait(TimeSpan.FromSeconds(3));
+        try { _weights?.Dispose(); _weights = null; }
+        finally { if (idle) _gate.Release(); }
+    }
 }

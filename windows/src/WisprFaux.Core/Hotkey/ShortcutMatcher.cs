@@ -72,12 +72,15 @@ public enum KeyKind
 {
     KeyDown,
     KeyUp,
-    /// <summary>Any mouse button went down. Only used to spot Ctrl-click.</summary>
+    /// <summary>A mouse button went down or the wheel turned: Ctrl-click, Ctrl+wheel zoom.</summary>
     MouseDown,
 }
 
-/// <summary>The parts of a low-level keyboard or mouse event the matcher needs.</summary>
-public readonly record struct KeyInput(KeyKind Kind, int VirtualKey, int ScanCode = 0);
+/// <summary>
+/// The parts of a low-level keyboard or mouse event the matcher needs. <c>IsRepeat</c> is a
+/// key-down for a key that was already down (Windows repeats key-downs while a key is held).
+/// </summary>
+public readonly record struct KeyInput(KeyKind Kind, int VirtualKey, int ScanCode = 0, bool IsRepeat = false);
 
 public readonly record struct Decision(bool Swallow, IReadOnlyList<HotkeyEvent> Events)
 {
@@ -95,8 +98,11 @@ public readonly record struct Decision(bool Swallow, IReadOnlyList<HotkeyEvent> 
 ///   the next trigger press ends it with PushToTalkReleased.
 /// - Esc during a session → Cancel (Esc is only swallowed while a session is active). While
 ///   <see cref="EscapeCancels"/> is set (the app is still transcribing), Esc also cancels.
-/// - Any other key or a mouse click while the trigger is held means it's being used as a
-///   modifier (Ctrl+C, Ctrl-click…) → Cancel, and the event passes through.
+/// - Any other key, a mouse click or the wheel while the trigger is held means it's being used
+///   as a modifier (Ctrl+C, Ctrl-click, Ctrl+wheel…) → Cancel, and the event passes through.
+///   So does pressing another modifier during the hold (Ctrl+Shift switches keyboard layout).
+/// - After a release, <see cref="EscapeCancels"/> is set so Esc cancels the transcription; the
+///   app clears it when it's done.
 ///
 /// Trigger keys themselves always pass through, so Ctrl keeps working as Ctrl.
 /// Runs inside the hook callback, so every call is O(1).
@@ -117,6 +123,13 @@ public sealed class ShortcutMatcher
     public HotkeyTrigger? HeldTrigger { get; private set; }
     /// <summary>Keys whose key-down was swallowed; their autorepeats and key-up are swallowed too.</summary>
     readonly HashSet<int> _swallowedKeys = new();
+    /// <summary>Other modifiers (Shift, Alt, Win) currently down.</summary>
+    readonly HashSet<int> _modifiersDown = new();
+    /// <summary>
+    /// Another modifier was pressed during this hold: Ctrl+Shift alone switches the keyboard
+    /// layout, so the release then cancels instead of dictating.
+    /// </summary>
+    bool _modifierUsedDuringHold;
 
     /// <summary>
     /// Set by the app after the trigger is released, while it's still working on the dictation:
@@ -150,6 +163,7 @@ public sealed class ShortcutMatcher
         CurrentPhase = Phase.Idle;
         HeldTrigger = null;
         _swallowedKeys.Clear();
+        _modifiersDown.Clear();
         return wasActive ? new[] { HotkeyEvent.Cancel } : Array.Empty<HotkeyEvent>();
     }
 
@@ -163,8 +177,10 @@ public sealed class ShortcutMatcher
         if (HeldTrigger is not { } held || isPhysicallyDown(held)) return Array.Empty<HotkeyEvent>();
         HeldTrigger = null;
         _swallowedKeys.Clear();
+        _modifiersDown.Clear();
         if (CurrentPhase != Phase.Holding) return Array.Empty<HotkeyEvent>();
         CurrentPhase = Phase.Idle;
+        EscapeCancels = true;
         return new[] { HotkeyEvent.PushToTalkReleased };
     }
 
@@ -190,9 +206,11 @@ public sealed class ShortcutMatcher
             {
                 case Phase.Idle:
                     CurrentPhase = Phase.Holding;
+                    _modifierUsedDuringHold = _modifiersDown.Count > 0;
                     return Decision.Of(false, HotkeyEvent.PushToTalkPressed);
                 case Phase.HandsFree:
                     CurrentPhase = Phase.Idle;
+                    EscapeCancels = true; // Esc keeps cancelling until the app says it's done.
                     return Decision.Of(false, HotkeyEvent.PushToTalkReleased);
                 default:
                     return Decision.Pass;
@@ -200,8 +218,24 @@ public sealed class ShortcutMatcher
         }
 
         var code = input.VirtualKey;
-        if (_swallowedKeys.Contains(code)) return Decision.Of(true); // Autorepeat of a swallowed key.
+        if (_swallowedKeys.Contains(code))
+        {
+            if (input.IsRepeat) return Decision.Of(true); // Autorepeat of a swallowed key.
+            _swallowedKeys.Remove(code); // A fresh press: its key-up was missed.
+        }
 
+        if (VK.IsModifier(code))
+        {
+            _modifiersDown.Add(code);
+            if (CurrentPhase == Phase.Holding) _modifierUsedDuringHold = true;
+            return Decision.Pass;
+        }
+        // Ctrl+Shift+Esc (Task Manager) and the like: a shortcut, not a cancel to swallow.
+        if (code == VK.Escape && CurrentPhase == Phase.Holding && _modifiersDown.Count > 0)
+        {
+            CurrentPhase = Phase.Idle;
+            return Decision.Of(false, HotkeyEvent.Cancel);
+        }
         if (code == VK.Escape && (CurrentPhase != Phase.Idle || EscapeCancels))
         {
             CurrentPhase = Phase.Idle;
@@ -213,7 +247,6 @@ public sealed class ShortcutMatcher
             CurrentPhase = Phase.HandsFree;
             return SwallowKey(code, HotkeyEvent.HandsFreeToggled);
         }
-        if (VK.IsModifier(code)) return Decision.Pass;
         if (CurrentPhase == Phase.Holding)
         {
             // The trigger is acting as a modifier for this key.
@@ -231,8 +264,12 @@ public sealed class ShortcutMatcher
             HeldTrigger = null;
             if (CurrentPhase != Phase.Holding) return Decision.Pass;
             CurrentPhase = Phase.Idle;
+            if (_modifierUsedDuringHold) return Decision.Of(false, HotkeyEvent.Cancel);
+            // Esc keeps cancelling while the app works on this dictation (the app clears it).
+            EscapeCancels = true;
             return Decision.Of(false, HotkeyEvent.PushToTalkReleased);
         }
+        _modifiersDown.Remove(input.VirtualKey);
         return _swallowedKeys.Remove(input.VirtualKey) ? Decision.Of(true) : Decision.Pass;
     }
 

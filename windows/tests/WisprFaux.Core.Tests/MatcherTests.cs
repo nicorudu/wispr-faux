@@ -6,6 +6,7 @@ namespace WisprFaux.Core.Tests;
 public class ShortcutMatcherTests
 {
     static KeyInput Down(int vk, int scan = 0) => new(KeyKind.KeyDown, vk, scan);
+    static KeyInput Repeat(int vk) => new(KeyKind.KeyDown, vk, IsRepeat: true);
     static KeyInput Up(int vk) => new(KeyKind.KeyUp, vk);
     static readonly KeyInput Click = new(KeyKind.MouseDown, 0);
 
@@ -54,7 +55,7 @@ public class ShortcutMatcherTests
         var space = m.Handle(Down(VK.Space));
         Assert.True(space.Swallow);
         Assert.Equal(new[] { HotkeyEvent.HandsFreeToggled }, space.Events);
-        Assert.True(m.Handle(Down(VK.Space)).Swallow); // Autorepeat.
+        Assert.True(m.Handle(Repeat(VK.Space)).Swallow); // Autorepeat.
         Assert.True(m.Handle(Up(VK.Space)).Swallow);
         Assert.Empty(m.Handle(Up(VK.LControl)).Events); // Keeps listening.
         Assert.Equal(ShortcutMatcher.Phase.HandsFree, m.CurrentPhase);
@@ -81,6 +82,7 @@ public class ShortcutMatcherTests
         var m = Default();
         m.EscapeCancels = true;
         Assert.Equal(new[] { HotkeyEvent.Cancel }, m.Handle(Down(VK.Escape)).Events);
+        Assert.False(m.EscapeCancels);
         m.Handle(Up(VK.Escape));
         Assert.Equal(Decision.Pass, m.Handle(Down(VK.Escape)));
     }
@@ -104,6 +106,53 @@ public class ShortcutMatcherTests
         Assert.Equal(Decision.Pass, m.Handle(Down(VK.LShift)));
         Assert.Equal(ShortcutMatcher.Phase.Holding, m.CurrentPhase);
         Assert.Equal(new[] { HotkeyEvent.Cancel }, m.Handle(Down(0x54)).Events);
+    }
+
+    [Fact]
+    public void CtrlShiftAloneSwitchesLayoutInsteadOfDictating()
+    {
+        var m = Default();
+        m.Handle(Down(VK.LControl));
+        m.Handle(Down(VK.LShift));
+        m.Handle(Up(VK.LShift));
+        Assert.Equal(new[] { HotkeyEvent.Cancel }, m.Handle(Up(VK.LControl)).Events);
+        // The next plain hold dictates again.
+        m.Handle(Down(VK.LControl));
+        Assert.Equal(new[] { HotkeyEvent.PushToTalkReleased }, m.Handle(Up(VK.LControl)).Events);
+    }
+
+    [Fact]
+    public void CtrlShiftEscReachesWindows()
+    {
+        var m = Default();
+        m.Handle(Down(VK.LControl));
+        m.Handle(Down(VK.LShift));
+        var esc = m.Handle(Down(VK.Escape));
+        Assert.False(esc.Swallow);
+        Assert.Equal(new[] { HotkeyEvent.Cancel }, esc.Events);
+    }
+
+    [Fact]
+    public void EscapeAfterReleaseCancelsTheTranscription()
+    {
+        var m = Default();
+        m.Handle(Down(VK.LControl));
+        m.Handle(Up(VK.LControl));
+        Assert.True(m.EscapeCancels);
+        var esc = m.Handle(Down(VK.Escape));
+        Assert.True(esc.Swallow);
+        Assert.Equal(new[] { HotkeyEvent.Cancel }, esc.Events);
+    }
+
+    [Fact]
+    public void AMissedKeyUpDoesntSwallowTheKeyForever()
+    {
+        var m = Default();
+        m.Handle(Down(VK.LControl));
+        Assert.True(m.Handle(Down(VK.Space)).Swallow);
+        m.Handle(Down(VK.LControl)); // Stops hands-free; Space's key-up never arrives.
+        m.EscapeCancels = false;
+        Assert.Equal(Decision.Pass, m.Handle(Down(VK.Space)));
     }
 
     [Fact]

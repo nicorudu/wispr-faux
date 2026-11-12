@@ -54,11 +54,12 @@ cd "$HOME\Documents\dictate\windows"
 The installer:
 
 1. Installs the **.NET 8 SDK** with `winget` if no .NET SDK 8 or later is installed. Windows may ask for permission (a UAC prompt) for this one step. If `winget` isn't available, it stops and tells you to install the SDK from <https://dotnet.microsoft.com/download/dotnet/8.0> (pick **SDK 8.0, Windows x64**), then run it again.
-2. **Builds** Wispr Faux. The first build downloads packages and takes a few minutes.
-3. **Installs** it in `%LOCALAPPDATA%\Programs\Wispr Faux`. No administrator rights are needed.
-4. **Downloads Whisper large-v3 turbo** (574 MB) into `%LOCALAPPDATA%\Wispr Faux\Models`.
-5. Adds **Wispr Faux** to the Start menu and has it **open when you sign in**.
-6. **Starts** it.
+2. Installs the **Visual C++ runtime** with `winget` if it's missing (whisper.cpp and llama.cpp need it; most PCs already have it).
+3. **Builds** Wispr Faux. The first build downloads packages and takes a few minutes.
+4. **Installs** it in `%LOCALAPPDATA%\Programs\Wispr Faux`. No administrator rights are needed.
+5. **Downloads Whisper large-v3 turbo** (574 MB) into `%LOCALAPPDATA%\Wispr Faux\Models`.
+6. Adds **Wispr Faux** to the Start menu and has it **open when you sign in**.
+7. **Starts** it.
 
 Options (pass them after `install.cmd` or `.\install.ps1`):
 
@@ -99,7 +100,8 @@ The very first dictation after starting can take a few extra seconds while the m
 | Hold Ctrl, speak, release | Dictate |
 | Ctrl + Space | Hands-free: keeps listening after you let go of Ctrl; press Ctrl again to stop |
 | Esc | Cancel while listening or transcribing (nothing is pasted) |
-| Ctrl + another key, or Ctrl-click (Ctrl+C, Ctrl+S…) | Works as a normal shortcut; the dictation is cancelled |
+| Ctrl + another key, Ctrl-click or Ctrl+wheel (Ctrl+C, Ctrl+S, zoom…) | Works as a normal shortcut; the dictation is cancelled |
+| Ctrl + Shift (switch keyboard layout), Ctrl+Shift+Esc | Work as usual; nothing is dictated |
 
 **Settings → Hold to talk** can limit it to the left or right Ctrl, or use **Right Alt (AltGr)** instead. Ctrl and Alt always reach your apps as usual.
 
@@ -140,7 +142,7 @@ That removes the app, its Start menu entry and its sign-in entry. Add `-RemoveDa
 
 ## How it behaves
 
-- **Pasting.** Every clipboard format is backed up, the text is put on the clipboard marked so Windows clipboard history (Win+V), cloud clipboard and clipboard managers skip it, Ctrl+V is pressed, and 500 ms later the clipboard is put back, unless you copied something new meanwhile. A second paste inside that window keeps the original backup. Formats Windows keeps as GDI objects (bitmaps, metafiles) aren't backed up; Windows rebuilds a copied bitmap from its image data, which is kept.
+- **Pasting.** Every clipboard format is backed up, the text is put on the clipboard marked so Windows clipboard history (Win+V), cloud clipboard and clipboard managers skip it, Ctrl+V is pressed, and the clipboard is put back 500 ms after the app has read the text (or after 5 s if nothing reads it), unless you copied something new meanwhile. Waiting for the read means slow targets, such as a remote desktop, still get the dictation and not your old clipboard. A second paste inside that window keeps the original backup. Formats Windows keeps as GDI objects (bitmaps, metafiles) aren't backed up; Windows rebuilds a copied bitmap from its image data, which is kept.
 - **Spacing.** When the character before the cursor isn't a space, a space goes first, so consecutive dictations don't run together. Only that one character is read (through UI Automation).
 - **Password fields** are never pasted into: the text is copied and the pill says so.
 - **Not a text field** (the desktop, a button, a list), or you switched apps while it was transcribing: the text is copied and the pill says *press Ctrl+V to paste*. When UI Automation can't tell what's focused, Wispr Faux pastes; a stray Ctrl+V does no harm.
@@ -173,6 +175,7 @@ On a PC with a recent GPU, turbo transcribes a 5–10 s dictation in well under 
 - **The text is copied instead of pasted.** The pill says why: a password field, no text field, an app running as administrator, or you switched apps.
 - **The speech model download fails.** Run `install.cmd` again (downloads resume), or click Download in Settings. The models come from Hugging Face (`huggingface.co`); a firewall or proxy may block it.
 - **Transcription failed / the model failed to load on the GPU.** Turn off **Use the graphics card** in Settings, quit Wispr Faux from the tray menu and open it again. Updating the graphics driver often fixes Vulkan problems too.
+- **Speech model failed to load (on CPU too).** The Visual C++ runtime may be missing: install it from <https://aka.ms/vs/17/release/vc_redist.x64.exe> (the installer normally does this).
 - **"Windows protected your PC" / SmartScreen** doesn't appear for a copy you built yourself. If an antivirus quarantines it, that's the keyboard hook; see the first item.
 - **It doesn't start at sign-in.** Check **Task Manager → Startup apps** (Wispr Faux must be *Enabled*) or the *Open at Sign-in* item in the tray menu.
 

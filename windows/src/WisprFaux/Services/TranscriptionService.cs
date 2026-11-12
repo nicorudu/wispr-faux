@@ -63,20 +63,23 @@ sealed class TranscriptionService : IDisposable
             Set(Phase.NotDownloaded);
             return;
         }
-        if (_loadTask is { IsCompleted: false }) return;
         Set(Phase.Loading);
-        _loadTask = Task.Run(() => LoadAsync(useGpu));
+        // One load at a time; a model picked while another loads is loaded right after it.
+        var previous = _loadTask ?? Task.CompletedTask;
+        var model = Model;
+        _loadTask = previous.ContinueWith(_ => LoadAsync(model, useGpu), TaskScheduler.Default).Unwrap();
     }
 
-    async Task LoadAsync(bool useGpu)
+    async Task LoadAsync(ModelFile model, bool useGpu)
     {
+        if (model != Model || _disposed) return; // Another model was picked meanwhile.
         try
         {
             var watch = Stopwatch.StartNew();
             RuntimeOptions.RuntimeLibraryOrder = useGpu
                 ? new List<RuntimeLibrary> { RuntimeLibrary.Cuda, RuntimeLibrary.Vulkan, RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx }
                 : new List<RuntimeLibrary> { RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx };
-            var factory = WhisperFactory.FromPath(Model.LocalPath, new WhisperFactoryOptions { UseGpu = useGpu });
+            var factory = WhisperFactory.FromPath(model.LocalPath, new WhisperFactoryOptions { UseGpu = useGpu });
             Runtime = RuntimeOptions.LoadedLibrary switch
             {
                 RuntimeLibrary.Vulkan => "GPU (Vulkan)",
@@ -88,14 +91,25 @@ sealed class TranscriptionService : IDisposable
             // A first pass on silence sets up the GPU kernels, so the first dictation isn't slow.
             await using (var processor = factory.CreateBuilder().WithLanguage("en").Build())
                 await foreach (var _ in processor.ProcessAsync(new float[AudioRecorder.SampleRate])) { }
-            _factory = factory;
+            await _gate.WaitAsync();
+            try
+            {
+                if (model != Model || _disposed)
+                {
+                    factory.Dispose();
+                    return;
+                }
+                _factory = factory;
+            }
+            finally { _gate.Release(); }
             LoadTime = watch.Elapsed;
-            Log.Info("Transcription", $"Loaded {Model.FileName} on {Runtime ?? "?"} in {watch.ElapsedMilliseconds} ms");
+            Log.Info("Transcription", $"Loaded {model.FileName} on {Runtime ?? "?"} in {watch.ElapsedMilliseconds} ms");
             Set(Phase.Ready);
         }
         catch (Exception e)
         {
-            Log.Error("Transcription", $"Couldn't load {Model.FileName}: {e}");
+            Log.Error("Transcription", $"Couldn't load {model.FileName}: {e}");
+            if (model != Model) return;
             Set(Phase.Failed, "Speech model failed to load: " + e.Message);
         }
     }
@@ -180,5 +194,14 @@ sealed class TranscriptionService : IDisposable
         }
     }
 
-    public void Dispose() => _factory?.Dispose();
+    bool _disposed;
+
+    /// <summary>Waits (briefly) for a transcription in progress before freeing the model.</summary>
+    public void Dispose()
+    {
+        _disposed = true;
+        var idle = _gate.Wait(TimeSpan.FromSeconds(3));
+        try { _factory?.Dispose(); _factory = null; }
+        finally { if (idle) _gate.Release(); }
+    }
 }

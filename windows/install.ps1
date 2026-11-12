@@ -3,7 +3,8 @@
     Builds Wispr Faux for Windows and installs it for everyday use.
 
 .DESCRIPTION
-    1. Checks for the .NET SDK (8 or later) and installs .NET 8 with winget if it's missing.
+    1. Checks for the .NET SDK (8 or later) and the Visual C++ runtime, and installs them with
+       winget if they're missing.
     2. Builds a Release copy of Wispr Faux.
     3. Quits any running Wispr Faux (cleanly, so it puts your clipboard back).
     4. Installs it in %LOCALAPPDATA%\Programs\Wispr Faux (no administrator rights needed).
@@ -67,7 +68,10 @@ if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
 function Test-DotNetSdk {
     $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
     if (-not $dotnet) { return $false }
-    $sdks = & dotnet --list-sdks 2>$null
+    # In Windows PowerShell 5.1, stderr from a native command under 'Stop' is a terminating error.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { $sdks = & dotnet --list-sdks 2>$null } finally { $ErrorActionPreference = $previous }
     foreach ($line in $sdks) {
         if ($line -match '^(\d+)\.' -and [int]$Matches[1] -ge 8) { return $true }
     }
@@ -87,6 +91,25 @@ if (-not (Test-DotNetSdk)) {
 }
 Note ("Using .NET SDK " + (& dotnet --version))
 
+# whisper.cpp and llama.cpp need the Visual C++ 2015-2022 runtime, which a fresh Windows may lack.
+function Test-VCRuntime {
+    $system = [Environment]::GetFolderPath('System')
+    foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'vcomp140.dll') {
+        if (-not (Test-Path -LiteralPath (Join-Path $system $dll))) { return $false }
+    }
+    return $true
+}
+
+if (-not (Test-VCRuntime)) {
+    Step 'Installing the Microsoft Visual C++ runtime (needed by the speech model)'
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        winget install --id Microsoft.VCRedist.2015+.x64 --exact --source winget --accept-package-agreements --accept-source-agreements
+    }
+    if (-not (Test-VCRuntime)) {
+        throw 'The Visual C++ runtime is missing. Install "Visual C++ Redistributable for Visual Studio 2015-2022 (x64)" from https://aka.ms/vs/17/release/vc_redist.x64.exe, then run this script again.'
+    }
+}
+
 # --- 2. Build ----------------------------------------------------------------------------------
 
 Step 'Building Wispr Faux (Release). The first build downloads packages and takes a few minutes'
@@ -97,7 +120,11 @@ if ($LASTEXITCODE -ne 0) { throw "The build failed (exit code $LASTEXITCODE). Sc
 
 # --- 3. Quit the running copy ------------------------------------------------------------------
 
-$running = Get-Process -Name 'WisprFaux' -ErrorAction SilentlyContinue
+# Only this Windows session's copy: other signed-in users' copies are theirs.
+$session = (Get-Process -Id $PID).SessionId
+function Get-OurCopy { Get-Process -Name 'WisprFaux' -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session } }
+
+$running = Get-OurCopy
 if ($running) {
     Step 'Quitting the running Wispr Faux'
     if (Test-Path -LiteralPath $Exe) {
@@ -105,7 +132,7 @@ if ($running) {
         Start-Process -FilePath $Exe -ArgumentList '--quit' -Wait -WindowStyle Hidden
     }
     $running | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
-    Get-Process -Name 'WisprFaux' -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-OurCopy | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 500
 }
 

@@ -14,12 +14,15 @@ $DataDir    = Join-Path $env:LOCALAPPDATA 'Wispr Faux'
 $Exe        = Join-Path $InstallDir 'WisprFaux.exe'
 $Shortcut   = Join-Path ([Environment]::GetFolderPath('Programs')) 'Wispr Faux.lnk'
 
-$running = Get-Process -Name 'WisprFaux' -ErrorAction SilentlyContinue
+$session = (Get-Process -Id $PID).SessionId
+function Get-OurCopy { Get-Process -Name 'WisprFaux' -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session } }
+
+$running = Get-OurCopy
 if ($running) {
     Write-Host '==> Quitting Wispr Faux'
     if (Test-Path -LiteralPath $Exe) { Start-Process -FilePath $Exe -ArgumentList '--quit' -Wait -WindowStyle Hidden }
     $running | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
-    Get-Process -Name 'WisprFaux' -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-OurCopy | Stop-Process -Force -ErrorAction SilentlyContinue
 }
 
 Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Wispr Faux' -ErrorAction SilentlyContinue

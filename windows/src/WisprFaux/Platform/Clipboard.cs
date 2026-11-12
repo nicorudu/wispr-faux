@@ -9,24 +9,72 @@ namespace WisprFaux.Platform;
 /// </summary>
 static class Win32Clipboard
 {
-    static System.Windows.Forms.NativeWindow? _owner;
+    static OwnerWindow? _owner;
 
     /// <summary>
-    /// A hidden message-only window that owns the clipboard while Wispr Faux writes to it:
-    /// SetClipboardData fails after EmptyClipboard when the clipboard was opened without a
-    /// window. Created on first use, on the UI thread.
+    /// A hidden message-only window that owns the clipboard while Wispr Faux writes to it
+    /// (SetClipboardData fails after EmptyClipboard when the clipboard was opened without a
+    /// window) and renders delayed text. Created on first use, on the UI thread.
     /// </summary>
-    static IntPtr Owner
+    static OwnerWindow OwnerWin => _owner ??= new OwnerWindow();
+    static IntPtr Owner => OwnerWin.Handle;
+
+    sealed class OwnerWindow : System.Windows.Forms.NativeWindow
     {
-        get
+        const int WM_RENDERFORMAT = 0x0305, WM_RENDERALLFORMATS = 0x0306, WM_DESTROYCLIPBOARD = 0x0307;
+
+        public string? PendingText;
+        public TaskCompletionSource? Rendered;
+
+        public OwnerWindow() =>
+            CreateHandle(new System.Windows.Forms.CreateParams { Caption = "Wispr Faux clipboard", Parent = new IntPtr(-3) /* HWND_MESSAGE */ });
+
+        protected override void WndProc(ref System.Windows.Forms.Message m)
         {
-            if (_owner is null)
+            switch (m.Msg)
             {
-                _owner = new System.Windows.Forms.NativeWindow();
-                _owner.CreateHandle(new System.Windows.Forms.CreateParams { Caption = "Wispr Faux clipboard", Parent = new IntPtr(-3) /* HWND_MESSAGE */ });
+                case WM_RENDERFORMAT when (uint)m.WParam == Native.CF_UNICODETEXT && PendingText is { } text:
+                    // The clipboard is already open on the reader's behalf; just hand over the data.
+                    SetBytes(Native.CF_UNICODETEXT, Encoding.Unicode.GetBytes(text + "\0"));
+                    Rendered?.TrySetResult();
+                    m.Result = IntPtr.Zero;
+                    return;
+                case WM_RENDERALLFORMATS when PendingText is { } all:
+                    if (Native.OpenClipboard(Handle))
+                    {
+                        if (Native.GetClipboardOwner() == Handle) SetBytes(Native.CF_UNICODETEXT, Encoding.Unicode.GetBytes(all + "\0"));
+                        Native.CloseClipboard();
+                    }
+                    return;
+                case WM_DESTROYCLIPBOARD:
+                    PendingText = null;
+                    Rendered?.TrySetResult();
+                    break;
             }
-            return _owner.Handle;
+            base.WndProc(ref m);
         }
+    }
+
+    /// <summary>
+    /// Offers <paramref name="text"/> with delayed rendering: the data is handed over only when
+    /// an app reads it, so the returned task says when the paste target has actually read it.
+    /// Marked transient like <see cref="SetText"/>.
+    /// </summary>
+    public static Task? OfferText(string text)
+    {
+        var owner = OwnerWin;
+        if (!Open(owner.Handle)) return null;
+        try
+        {
+            Native.EmptyClipboard(); // Sends WM_DESTROYCLIPBOARD for an earlier offer.
+            owner.PendingText = text;
+            var rendered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            owner.Rendered = rendered;
+            Native.SetClipboardData(Native.CF_UNICODETEXT, IntPtr.Zero);
+            MarkTransient();
+            return rendered.Task;
+        }
+        finally { Native.CloseClipboard(); }
     }
 
     static readonly uint ExcludeFromMonitoring = Native.RegisterClipboardFormat("ExcludeClipboardContentFromMonitorProcessing");

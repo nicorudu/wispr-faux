@@ -26,7 +26,12 @@ static class Program
         using var mutex = new Mutex(true, MutexName, out var isFirst);
         if (!isFirst)
         {
-            if (!background && EventWaitHandle.TryOpenExisting(ShowEventName, out var show)) show.Set();
+            if (!background && EventWaitHandle.TryOpenExisting(ShowEventName, out var show))
+            {
+                // This copy was just opened by the user, so it may hand the foreground on.
+                Native.AllowSetForegroundWindow(Native.ASFW_ANY);
+                show.Set();
+            }
             return 0;
         }
 

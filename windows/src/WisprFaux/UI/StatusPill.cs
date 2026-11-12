@@ -34,7 +34,7 @@ sealed class StatusPill : Form
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.Manual;
-        TopMost = true;
+        // Not TopMost = true: WinForms then focuses the form on Show. WS_EX_TOPMOST is set in CreateParams.
         BackColor = Color.FromArgb(28, 28, 30);
         ForeColor = Color.White;
         DoubleBuffered = true;

@@ -7,8 +7,13 @@ namespace WisprFaux.Platform;
 /// <summary>
 /// Pastes text into the focused app the way the Mac app does:
 /// 1. back up every clipboard format; 2. put the text on the clipboard, marked so clipboard
-/// history skips it; 3. press Ctrl+V; 4. put the clipboard back 500 ms later, unless something
-/// new was copied meanwhile. A second paste inside that window keeps the original backup.
+/// history skips it; 3. press Ctrl+V; 4. put the clipboard back 500 ms after the app has read
+/// the text, unless something new was copied meanwhile. A second paste inside that window keeps
+/// the original backup.
+///
+/// The text is offered with delayed rendering, so Wispr Faux knows when the app read it: a slow
+/// target (a remote desktop, a busy Word) never gets the old clipboard. If nothing reads it
+/// within 5 s, the clipboard is put back anyway.
 /// </summary>
 sealed class TextInserter
 {
@@ -31,18 +36,26 @@ sealed class TextInserter
             _backup ??= ClipboardSnapshot.Capture();
             var backupTime = watch.ElapsedMilliseconds;
 
-            if (!Win32Clipboard.SetText(text, transient: true))
-                throw new InvalidOperationException("the clipboard is in use by another app");
+            var read = Win32Clipboard.OfferText(text)
+                ?? throw new InvalidOperationException("the clipboard is in use by another app");
             _ourSequence = Native.GetClipboardSequenceNumber();
 
-            await Task.Delay(10);
-            await WaitForModifiersAsync();
-            SendCtrlV();
+            try
+            {
+                await Task.Delay(10);
+                await WaitForModifiersAsync();
+                SendCtrlV();
+            }
+            catch
+            {
+                RestoreNow(); // Don't leave the user's clipboard replaced.
+                throw;
+            }
             Log.Info("Paste", $"Pasted {text.Length} characters (backup of {_backup.FormatCount} formats, {_backup.ByteCount} bytes, {_backup.SkippedFormats} skipped, in {backupTime} ms)");
 
             var timer = new CancellationTokenSource();
             _restoreTimer = timer;
-            _ = RestoreLaterAsync(restoreDelayMs, timer.Token);
+            _ = RestoreLaterAsync(read, restoreDelayMs, timer.Token);
         }
         finally
         {
@@ -50,10 +63,23 @@ sealed class TextInserter
         }
     }
 
-    async Task RestoreLaterAsync(int delayMs, CancellationToken token)
+    async Task RestoreLaterAsync(Task read, int delayMs, CancellationToken token)
     {
-        try { await Task.Delay(delayMs, token); }
+        var watch = Stopwatch.StartNew();
+        try
+        {
+            if (await Task.WhenAny(read, Task.Delay(5000, token)) != read)
+                Log.Info("Paste", "Nothing read the pasted text within 5 s; putting the clipboard back");
+            else
+            {
+                // Rendering may count as a clipboard change; it's still Wispr Faux's text.
+                _ourSequence = Native.GetClipboardSequenceNumber();
+                if (watch.ElapsedMilliseconds > 400) Log.Info("Paste", $"The app read the text after {watch.ElapsedMilliseconds} ms");
+            }
+            await Task.Delay(delayMs, token);
+        }
         catch (TaskCanceledException) { return; }
+        if (token.IsCancellationRequested) return;
         RestoreNow();
     }
 

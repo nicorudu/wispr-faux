@@ -39,8 +39,10 @@ static class FocusedField
         var thread = new Thread(() =>
         {
             try { result = ReadElement(app, pid, window); }
-            catch (Exception e) when (e is ElementNotAvailableException or InvalidOperationException
-                                          or System.Runtime.InteropServices.COMException or ArgumentException or TimeoutException) { }
+            // UI Automation turns a provider's error codes into all sorts of exceptions
+            // (NotImplementedException, UnauthorizedAccessException…). On this thread any of
+            // them would end the app, so every one means "couldn't tell".
+            catch (Exception) { }
         }) { IsBackground = true, Name = "Focused field read" };
         thread.SetApartmentState(ApartmentState.MTA);
         thread.Start();
@@ -80,8 +82,8 @@ static class FocusedField
         ControlType.Button, ControlType.CheckBox, ControlType.RadioButton, ControlType.List,
         ControlType.ListItem, ControlType.Tree, ControlType.TreeItem, ControlType.Menu,
         ControlType.MenuItem, ControlType.MenuBar, ControlType.TabItem, ControlType.Hyperlink,
-        ControlType.Image, ControlType.ScrollBar, ControlType.Slider, ControlType.Table,
-        ControlType.DataItem, ControlType.Header, ControlType.HeaderItem, ControlType.SplitButton,
+        // Not Table or DataItem: Ctrl+V into a selected spreadsheet cell works.
+        ControlType.Image, ControlType.ScrollBar, ControlType.Slider, ControlType.Header, ControlType.HeaderItem, ControlType.SplitButton,
         ControlType.ToolBar, ControlType.TitleBar,
     };
 

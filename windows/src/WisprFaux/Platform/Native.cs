@@ -213,6 +213,10 @@ static class Native
 
     public static bool IsCurrentProcessElevated() => IsElevated((uint)Environment.ProcessId);
 
+    // Audio
+    [DllImport("winmm.dll")]
+    public static extern int waveInMessage(IntPtr hwi, uint uMsg, out uint dw1, out uint dw2);
+
     // Windows (pill)
     public const int WS_EX_TOPMOST = 0x8, WS_EX_TRANSPARENT = 0x20, WS_EX_TOOLWINDOW = 0x80,
         WS_EX_LAYERED = 0x80000, WS_EX_NOACTIVATE = 0x08000000;

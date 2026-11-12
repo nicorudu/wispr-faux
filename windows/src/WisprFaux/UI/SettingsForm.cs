@@ -20,6 +20,7 @@ sealed class SettingsForm : Form
     readonly Button _modelDownload = new() { AutoSize = true };
     readonly ComboBox _language = DropDown(200);
     readonly ComboBox _microphone = DropDown(320);
+    readonly CheckBox _keepMic = new() { Text = "Keep the microphone ready, so no first words are lost (Windows shows it as in use)", AutoSize = true, MaximumSize = new Size(540, 0) };
     readonly CheckBox _gpu = new() { Text = "Use the graphics card (Vulkan) when there is one", AutoSize = true };
 
     // Cleanup
@@ -163,8 +164,17 @@ sealed class SettingsForm : Form
             _controller.Settings.MicrophoneDevice = item.Number;
             _controller.Settings.MicrophoneName = item.Number < 0 ? null : item.Name;
             _controller.Settings.Save();
+            _controller.ApplyMicrophoneSettings();
         };
         panel.Controls.Add(Labeled("Microphone", _microphone));
+        _keepMic.CheckedChanged += (_, _) =>
+        {
+            if (_updating) return;
+            _controller.Settings.KeepMicrophoneReady = _keepMic.Checked;
+            _controller.Settings.Save();
+            _controller.ApplyMicrophoneSettings();
+        };
+        panel.Controls.Add(_keepMic);
 
         _gpu.CheckedChanged += (_, _) =>
         {
@@ -188,7 +198,8 @@ sealed class SettingsForm : Form
         _microphone.Items.Clear();
         _microphone.Items.Add(new MicItem(-1, "Windows default microphone"));
         foreach (var (number, name) in AudioRecorder.Devices()) _microphone.Items.Add(new MicItem(number, name));
-        var current = AudioRecorder.Resolve(_controller.Settings.MicrophoneDevice, _controller.Settings.MicrophoneName);
+        var current = _controller.Settings.MicrophoneDevice < 0 ? -1
+            : AudioRecorder.Resolve(_controller.Settings.MicrophoneDevice, _controller.Settings.MicrophoneName);
         _microphone.SelectedItem = _microphone.Items.Cast<MicItem>().FirstOrDefault(i => i.Number == current) ?? _microphone.Items[0];
         _updating = false;
     }
@@ -287,6 +298,7 @@ sealed class SettingsForm : Form
         var language = Array.FindIndex(Languages, l => l.Code == s.Language);
         _language.SelectedIndex = language < 0 ? 0 : language;
         _gpu.Checked = s.UseGpu;
+        _keepMic.Checked = s.KeepMicrophoneReady;
         _startAtLogin.Checked = StartupManager.IsEnabled;
         _cleanupOff.Checked = _controller.Cleanup.Mode == CleanupMode.Off;
         _cleanupLocal.Checked = _controller.Cleanup.Mode == CleanupMode.OnDevice;

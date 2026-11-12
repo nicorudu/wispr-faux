@@ -99,6 +99,7 @@ sealed class DictationController : IDisposable
             Log.Error("Hotkey", "Couldn't install the keyboard hook: " + e.Message);
         }
         _foreground.Start();
+        ApplyMicrophoneSettings();
         _poll.Start();
         _ = ProcessEventsAsync();
         Log.Info("App", $"Started. Triggers: {TriggerDescription}; model: {Transcription.Model.FileName}; cleanup: {Cleanup.Mode}; elevated: {Native.IsCurrentProcessElevated()}");
@@ -120,7 +121,7 @@ sealed class DictationController : IDisposable
         _transcriptionCancel?.Cancel();
         _hook.Dispose();
         _foreground.Dispose();
-        _recorder.Cancel();
+        _recorder.Dispose();
         // Don't quit with Wispr Faux's text still standing in for the user's clipboard.
         _inserter.RestoreNow();
         _pill.Dispose();
@@ -159,7 +160,7 @@ sealed class DictationController : IDisposable
                 if (recording is not null)
                 {
                     Log.Info("Audio", $"Recorded {recording.Duration.TotalSeconds:0.00} s (held {held?.TotalMilliseconds:0} ms) from {recording.Device}, loudest {recording.Levels.LoudestWindowDbfs:0} dBFS, first sample after {recording.FirstSampleAfter.TotalMilliseconds:0} ms");
-                    StartTranscription(recording, _dictationCount, releasedAt);
+                    StartTranscription(recording, held ?? recording.Duration, _dictationCount, releasedAt);
                 }
                 break;
 
@@ -219,11 +220,12 @@ sealed class DictationController : IDisposable
 
     // MARK: Transcribing and pasting
 
-    void StartTranscription(Recording recording, int id, Stopwatch releasedAt)
+    void StartTranscription(Recording recording, TimeSpan held, int id, Stopwatch releasedAt)
     {
         // Until a transcription starts there's nothing for Esc to cancel.
         _hook.SetEscapeCancels(false);
-        switch (_gate.Verdict(recording.Duration, recording.Levels))
+        // How long the key was held, not the audio: the audio includes the moment before the press.
+        switch (_gate.Verdict(held, recording.Levels))
         {
             case GateVerdict.TooShort:
                 return; // An accidental tap: nothing to say about it.
@@ -480,10 +482,38 @@ sealed class DictationController : IDisposable
         _notice = null;
     }
 
+    /// <summary>
+    /// Applies the microphone settings: keeps the chosen (or default) microphone open and ready,
+    /// or closes it when that's turned off.
+    /// </summary>
+    public void ApplyMicrophoneSettings()
+    {
+        _recorder.KeepReady = _settings.KeepMicrophoneReady;
+        if (!_settings.KeepMicrophoneReady)
+        {
+            if (!_recorder.IsRecording) _ = Task.Run(_recorder.Close);
+            return;
+        }
+        if (MicrophonePrivacy.IsBlocked() || _recorder.IsRecording) return;
+        var device = AudioRecorder.Resolve(_settings.MicrophoneDevice, _settings.MicrophoneName);
+        _ = WarmUpAsync(device);
+    }
+
+    async Task WarmUpAsync(int device)
+    {
+        try { await _recorder.WarmUpAsync(device); }
+        catch (Exception e) { Log.Error("Audio", "Couldn't open the microphone ahead of time: " + e.Message); }
+    }
+
+    int _pollCount;
+
     /// <summary>Checks for a missed key-up while a trigger is held, and that the hook is still alive.</summary>
     void Poll()
     {
         if (_hook.HeldTrigger is not null) _hook.Resync();
+
+        // Every 5 s: follow a change of default microphone, reopen after sleep or an unplug.
+        if (++_pollCount % 20 == 0 && _pressStarted is null) ApplyMicrophoneSettings();
 
         if (!_hook.IsRunning) return;
         var info = new Native.LASTINPUTINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<Native.LASTINPUTINFO>() };

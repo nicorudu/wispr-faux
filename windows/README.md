@@ -149,7 +149,7 @@ That removes the app, its Start menu entry and its sign-in entry. Add `-RemoveDa
 - **Apps running as administrator.** Windows doesn't let a normal app type into them, so Wispr Faux copies the text instead and says so. (Running Wispr Faux itself as administrator would lift this, but isn't recommended.)
 - **Silence.** Taps under 250 ms are ignored; quiet recordings show *Didn't hear anything*; Whisper's "[BLANK_AUDIO]"-style output, and its invented "Thank you." on near-silence, are dropped.
 - **History.** The last 100 transcripts are in `%LOCALAPPDATA%\Wispr Faux\history.json` (the original wording is kept when cleanup changed it). No audio is stored.
-- **Recording** is capped at 5 minutes. The microphone is only open while you hold the key.
+- **Recording** is capped at 5 minutes. Opening a microphone on Windows can take a second or more (Bluetooth headsets especially), which would cut off your first words, so by default Wispr Faux keeps the microphone open and holds the last 0.4 s in memory. A press then records at once, including the instant before it. Nothing beyond that rolling 0.4 s is kept, nothing is saved, and only dictations are transcribed; Windows does show the microphone as in use. Turn off **Settings → Keep the microphone ready** to open it only while you hold the key, as on the Mac.
 - **Only one copy runs** at a time. Opening Wispr Faux from the Start menu while it's running opens its Settings.
 - **Log.** `%LOCALAPPDATA%\Wispr Faux\Logs\wisprfaux.log` records timings, lengths, app names and errors, never what you said or what's on the clipboard. **Settings → Open the log** opens it.
 

@@ -15,6 +15,11 @@ public sealed class AppSettings
     public int MicrophoneDevice { get; set; } = -1;
     /// <summary>The device's name, so the choice survives devices being renumbered.</summary>
     public string? MicrophoneName { get; set; }
+    /// <summary>
+    /// Keep the microphone open between dictations, so none of the first words are lost while a
+    /// device starts up. Windows then shows the microphone as in use.
+    /// </summary>
+    public bool KeepMicrophoneReady { get; set; } = true;
 
     public string WhisperModel { get; set; } = ModelCatalog.TurboQ5.Id;
     /// <summary>"auto" detects the language of each dictation; "en", "es", … fix it.</summary>

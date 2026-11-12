@@ -1,0 +1,4 @@
+# Windows scripts keep Windows line endings, however the repo is checked out.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.sln text eol=crlf

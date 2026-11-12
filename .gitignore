@@ -21,3 +21,8 @@ rea/
 
 # xcodebuild output for the wisprfaux-bench tool (MLX needs xcodebuild for its Metal shaders)
 Packages/DictationKit/.build-xcode/
+
+# Windows version (windows/): .NET build output
+windows/**/bin/
+windows/**/obj/
+windows/.vs/

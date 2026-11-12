@@ -150,10 +150,13 @@ Measured on the M4 Mac mini with `wisprfaux-bench cleanup` (25 cases: 10 stumble
 | Model (on this Mac) | Passed | Typical stumble | List or email | Download |
 |---|---|---|---|---|
 | **Qwen3 1.7B** | **22/25** | **0.55 s** | 1.0 s | 0.98 GB |
+| Qwen3 4B Instruct 2507 | 21/25 | 1.2 s | 2.3 s | 2.28 GB |
 
 Qwen3 1.7B's misses: it returned "Okay so um basically…" unchanged; it merged a "scratch that" into the question it took back ("Can we meet Thursday at 10:30 AM instead." rather than "I have a conflict, let's do Thursday at 10:30 AM instead."); and it wrote the haiku it was asked for, which the guard rejected, so the dictation was pasted as spoken, "Uh" included. On the 23 cases before the Spanish and French ones were added, the list, email and correction work took it from 17/23 to 20/23.
 
-On the first 16 cases (before lists, emails and the longer corrections were added): LFM2.5 1.2B passed 10/16 at 0.40 s per cleanup (and once flipped a meaning); Qwen3 4B Instruct 2507 passed 14/16 at 1.26 s (2.28 GB download); Qwen3 1.7B passed 14/16 at 0.55 s.
+Qwen3 4B gets three of those right: the "scratch that", the "um basically", and the email's line breaks without help. But it half-applies the "45 thousand… make that 60k, no sorry, 55,000" chain ("Let's allocate 45 thousand dollars to Q3 marketing, actually wait, make that 55,000 dollars total."), which changes the meaning. It also reorders "set dictate up" to "set up dictate", and its reply to the Spanish stumble was rejected for adding words, so that dictation was pasted as spoken. It's about twice as slow, and its 2.3 s for a list or an email is close to the app's 3 s limit, past which a dictation is pasted as spoken. So 1.7B stays the default.
+
+On the first 16 cases (before lists, emails and the longer corrections were added): LFM2.5 1.2B passed 10/16 at 0.40 s per cleanup (and once flipped a meaning); Qwen3 4B and Qwen3 1.7B both passed 14/16.
 
 Every model wrote a haiku when told to "write a haiku", and the guard rejected all of them. `mlx-swift-lm` is pinned to 2.30.6, the last release that builds with Swift 6.0 (Xcode 16); newer releases support newer models (Qwen3.5, Gemma 4) but need Xcode 26.
 

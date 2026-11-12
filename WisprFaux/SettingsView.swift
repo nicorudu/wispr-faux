@@ -53,10 +53,24 @@ struct SettingsView: View {
 
             cleanupSection
 
-            Section("Transcription") {
+            Section {
                 LabeledContent("Model", value: controller.transcription.model.displayName)
+                Picker("Language", selection: Binding(
+                    get: { controller.transcription.language },
+                    set: { controller.transcription.setLanguage($0) }
+                )) {
+                    ForEach(controller.transcription.languageChoices, id: \.self) { code in
+                        Text(TranscriptionService.languageName(code)).tag(code)
+                    }
+                }
+                .disabled(controller.transcription.model.isEnglishOnly)
                 LabeledContent("Runs", value: "On this Mac (WhisperKit, Neural Engine)")
                 LabeledContent("Capture format", value: "\(Int(AudioFormat.sampleRate / 1000)) kHz mono")
+            } header: {
+                Text("Transcription")
+            } footer: {
+                Text(languageFooter)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Permissions") {
@@ -76,6 +90,21 @@ struct SettingsView: View {
             NSApp.activate()
             controller.refreshNow()
             controller.loginItem.refresh()
+        }
+    }
+
+    private var languageFooter: String {
+        let transcription = controller.transcription
+        if transcription.model.isEnglishOnly {
+            return "\(transcription.model.displayName) only knows English."
+        }
+        return switch transcription.language {
+        case "en":
+            "Choose Detect automatically to dictate in Spanish, French or another language too."
+        case TranscriptionService.detectLanguage:
+            "Whisper picks the language of each dictation, so you can switch between English, Spanish and French from one dictation to the next. A dictation that switches language midway is transcribed as its main language."
+        default:
+            "Every dictation is transcribed as \(TranscriptionService.languageName(transcription.language))."
         }
     }
 
@@ -152,11 +181,11 @@ struct SettingsView: View {
     private var footerText: String {
         switch cleanup.mode {
         case .off:
-            "Removes “um”, repeated words and self-corrections (“Tuesday, no wait, Wednesday”) before pasting."
+            "Removes “um”, repeated words and self-corrections (“Tuesday, no wait, Wednesday”), and lays out lists and emails, before pasting."
         case .onDevice:
-            "Runs only when a dictation has a stumble, adding about half a second. Nothing leaves this Mac."
+            "Runs only when a dictation has a stumble or reads as a list or an email, adding about half a second (a second for a list or an email). Nothing leaves this Mac."
         case .cloud:
-            "Runs only when a dictation has a stumble. That dictation's text goes to \(cleanup.provider.displayName); audio never leaves this Mac. If the reply is slow or odd, the text is pasted as spoken."
+            "Runs only when a dictation has a stumble or reads as a list or an email. That dictation's text goes to \(cleanup.provider.displayName); audio never leaves this Mac. If the reply is slow or odd, the text is pasted as spoken."
         }
     }
 

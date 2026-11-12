@@ -10,11 +10,14 @@ public struct Transcription: Sendable, Equatable {
     public var audioDuration: Duration
     /// Wall-clock time spent transcribing.
     public var processingDuration: Duration
+    /// The language Whisper transcribed in, e.g. "es" (detected or as set).
+    public var language: String?
 
-    public init(text: String, audioDuration: Duration, processingDuration: Duration) {
+    public init(text: String, audioDuration: Duration, processingDuration: Duration, language: String? = nil) {
         self.text = text
         self.audioDuration = audioDuration
         self.processingDuration = processingDuration
+        self.language = language
     }
 
     /// Processing time over audio length: 0.1 means ten times faster than real time.

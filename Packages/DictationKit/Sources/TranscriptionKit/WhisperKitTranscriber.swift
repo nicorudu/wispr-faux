@@ -18,20 +18,26 @@ public actor WhisperKitTranscriber: Transcriber {
     }
 
     public nonisolated let model: WhisperModel
-    /// Spoken language. English-only models ignore anything else.
-    public nonisolated let language: String
+    /// Spoken language, e.g. "en", or nil to detect it for each dictation. English-only
+    /// models always transcribe English.
+    public private(set) var language: String?
     private let store: ModelStore
 
     private var kit: WhisperKit?
     private var loadTask: Task<Duration, any Error>?
 
-    public init(model: WhisperModel, store: ModelStore = .standard, language: String = "en") {
+    public init(model: WhisperModel, store: ModelStore = .standard, language: String? = "en") {
         self.model = model
         self.store = store
         self.language = language
     }
 
     public var isLoaded: Bool { kit != nil }
+
+    /// Takes effect from the next transcription; the model stays loaded.
+    public func setLanguage(_ language: String?) {
+        self.language = language
+    }
 
     /// Loads the model from disk and returns how long that took. Calls while a load is in
     /// progress wait for it; later calls return at once.
@@ -82,7 +88,8 @@ public actor WhisperKitTranscriber: Transcriber {
         return Transcription(
             text: text,
             audioDuration: .seconds(Double(pcm16k.count) / 16_000),
-            processingDuration: .now - started
+            processingDuration: .now - started,
+            language: results.first?.language
         )
     }
 
@@ -95,12 +102,15 @@ public actor WhisperKitTranscriber: Transcriber {
     }
 
     func decodingOptions(sampleCount: Int) -> DecodingOptions {
-        DecodingOptions(
+        // Whisper picks one language per 30 s window, so a dictation that switches language
+        // midway is transcribed as its main language (the rest may come out translated).
+        let detect = language == nil && !model.isEnglishOnly
+        return DecodingOptions(
             task: .transcribe,
-            language: language,
+            language: model.isEnglishOnly ? "en" : language,
             temperature: 0,
             usePrefillPrompt: true,
-            detectLanguage: false,
+            detectLanguage: detect,
             skipSpecialTokens: true,
             withoutTimestamps: true,
             // Whisper hears 30 s at a time. Longer recordings are split at pauses.

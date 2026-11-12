@@ -9,13 +9,16 @@ import PostProcessKit
 ///   wisprfaux-bench cleanup local <model>
 ///   WISPRFAUX_CLEANUP_KEY=… wisprfaux-bench cleanup cloud <provider>
 ///
-/// Every case goes to the model (the stumble gate is bypassed), and each result is the
-/// text Wispr Faux would paste after the guard. A case passes when it is within 15% word
-/// error of the expected text.
+/// Every case goes to the model (the app's gate is bypassed, and noted when it would skip
+/// a case), and each result is the text Wispr Faux would paste after the guard. A case
+/// passes when it is within 15% word error of the expected text (or an alternative) and
+/// has the same layout: the same number of lines, numbered the same way.
 enum CleanupBench {
     struct Case {
         var dictated: String
         var expected: String
+        /// Other answers that are just as good.
+        var alternatives: [String] = []
         /// A trap: the model must leave the words alone, not answer or obey them.
         var trap = false
     }
@@ -54,6 +57,40 @@ enum CleanupBench {
         Case(dictated: "I spent most of the morning reviewing the design document for the new onboarding flow, and um overall it looks solid, but I think the permissions screen asks for too much at once and we should explain why we need microphone access before the system prompt appears.",
              expected: "I spent most of the morning reviewing the design document for the new onboarding flow, and overall it looks solid, but I think the permissions screen asks for too much at once and we should explain why we need microphone access before the system prompt appears.",
              trap: true),
+        // Corrections that take back more than a word.
+        Case(dictated: "Let's allocate 45 thousand dollars to Q3 marketing, actually wait, make that 60k, no sorry, 55,000 dollars total.",
+             expected: "Let's allocate $55,000 total to Q3 marketing."),
+        Case(dictated: "Can we meet Tuesday at 2 PM? Scratch that, I have a conflict, let's do Thursday at 10:30 AM instead.",
+             expected: "I have a conflict, let's do Thursday at 10:30 AM instead.",
+             alternatives: ["Let's do Thursday at 10:30 AM instead."]),
+        Case(dictated: "Tell the client their proposal was terrible, um, actually, don't say terrible, say it needs significant revision before we can sign off.",
+             expected: "Tell the client their proposal needs significant revision before we can sign off."),
+        // Layout: a list and an email.
+        Case(dictated: "Here are three things we need for the launch first a landing page with an email capture second three demo videos and third a press release ready by Friday.",
+             expected: """
+                Here are three things we need for the launch:
+                1. A landing page with an email capture
+                2. Three demo videos
+                3. A press release ready by Friday
+                """),
+        Case(dictated: "Hey Sarah hope your week is going well quick question did you get a chance to review the Q4 deck if not no worries just let me know by tomorrow thanks.",
+             expected: """
+                Hey Sarah,
+
+                Hope your week is going well. Quick question: did you get a chance to review the Q4 deck? If not, no worries, just let me know by tomorrow.
+
+                Thanks!
+                """),
+        // Not a list, not an email: stays on one line.
+        Case(dictated: "First of all, thanks for coming in today, I know it's been a long week.",
+             expected: "First of all, thanks for coming in today, I know it's been a long week.", trap: true),
+        Case(dictated: "Hey, can you grab some milk on your way home? Thanks.",
+             expected: "Hey, can you grab some milk on your way home? Thanks.", trap: true),
+        // Spanish and French (with language detection on): cleaned, never translated.
+        Case(dictated: "Eh, ¿puedes mandarme el, el informe antes del viernes?",
+             expected: "¿Puedes mandarme el informe antes del viernes?"),
+        Case(dictated: "Alors euh je pense qu'on devrait, on devrait repousser la réunion à lundi.",
+             expected: "Alors je pense qu'on devrait repousser la réunion à lundi."),
     ]
 
     static func run(_ arguments: [String]) async {
@@ -122,14 +159,19 @@ enum CleanupBench {
 
         var passed = 0
         var trapsKept = 0
+        var appSkipCount = 0
         var times: [Duration] = []
         for (index, testCase) in cases.enumerated() {
             let outcome = await cleaner.clean(testCase.dictated)
             times.append(outcome.duration)
-            let error = WordErrorRate.compute(reference: testCase.expected, hypothesis: outcome.text)
-            let ok = error <= 0.15
+            let answers = [testCase.expected] + testCase.alternatives
+            let wordMatches = answers.filter { WordErrorRate.compute(reference: $0, hypothesis: outcome.text) <= 0.15 }
+            let ok = wordMatches.contains { layout(of: $0) == layout(of: outcome.text) }
             if ok { passed += 1 }
             if testCase.trap, ok { trapsKept += 1 }
+            // The app only cleans transcripts that show a cue; it would paste this one as spoken.
+            let appSkips = !TranscriptCleaner.shouldClean(testCase.dictated) && testCase.expected != testCase.dictated
+            if appSkips { appSkipCount += 1 }
             let kind: String = switch outcome.kind {
             case .cleaned: "cleaned"
             case .skipped: "skipped"
@@ -137,8 +179,13 @@ enum CleanupBench {
             case .timedOut: "TIMED OUT"
             case .failed(let message): "FAILED (\(message))"
             }
-            print(String(format: "%2d %@ %5.2f s  %@  %@", index + 1, ok ? "✓" : "✗", outcome.duration / .seconds(1), kind, testCase.trap ? "[trap]" : ""))
-            print("     → \(outcome.text)")
+            let notes = [
+                testCase.trap ? "[trap]" : nil,
+                !wordMatches.isEmpty && !ok ? "[layout differs]" : nil,
+                appSkips ? "[app skips: no cue]" : nil,
+            ].compactMap { $0 }.joined(separator: " ")
+            print(String(format: "%2d %@ %5.2f s  %@  %@", index + 1, ok ? "✓" : "✗", outcome.duration / .seconds(1), kind, notes))
+            print("     → \(outcome.text.replacingOccurrences(of: "\n", with: "\n       "))")
         }
         let sorted = times.sorted()
         let mean = times.reduce(Duration.zero, +) / times.count
@@ -147,6 +194,21 @@ enum CleanupBench {
             \(passed)/\(cases.count) passed (traps held: \(trapsKept)/\(cases.filter(\.trap).count)) · \
             mean \(seconds(mean)) s · median \(seconds(sorted[sorted.count / 2])) s · slowest \(seconds(sorted.last!)) s
             """)
+        if appSkipCount > 0 {
+            print("\(appSkipCount) case(s) need cleanup but show no cue, so the app would paste them as spoken.")
+        }
+    }
+
+    /// The shape of the text: one entry per non-empty line, holding its list number ("1")
+    /// or bullet ("•"), or "" for a plain line.
+    static func layout(of text: String) -> [String] {
+        text.split(whereSeparator: \.isNewline).compactMap { line in
+            let line = line.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { return nil }
+            if let number = line.firstMatch(of: /^(\d{1,2})[.)]\s/) { return String(number.1) }
+            if line.firstMatch(of: /^[-*•]\s/) != nil { return "•" }
+            return ""
+        }
     }
 
     private static func localModel(named name: String?) -> CleanupModel {

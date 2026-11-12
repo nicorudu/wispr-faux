@@ -8,7 +8,7 @@ import TranscriptionKit
 //
 //   swift run -c release wisprfaux-bench models
 //   swift run -c release wisprfaux-bench download <model>
-//   swift run -c release wisprfaux-bench run <model> <audio file>... [--runs N]
+//   swift run -c release wisprfaux-bench run <model> <audio file>... [--runs N] [--language <code>|auto]
 //
 // For `run`, a .txt file next to an audio file (same name) is its reference transcript,
 // used to report word error rate. Models live where the app finds them
@@ -19,7 +19,7 @@ let usage = """
     usage:
       wisprfaux-bench models
       wisprfaux-bench download <model>
-      wisprfaux-bench run <model> <audio file>... [--runs N]
+      wisprfaux-bench run <model> <audio file>... [--runs N] [--language <code>|auto]
       wisprfaux-bench cleanup-models
       wisprfaux-bench cleanup-download <model>
       wisprfaux-bench cleanup local <model>
@@ -101,13 +101,20 @@ case "run":
         runs = value
         arguments.removeSubrange(index...(index + 1))
     }
+    // English unless told otherwise, as in the app; "auto" lets Whisper detect it.
+    var language: String? = "en"
+    if let index = arguments.firstIndex(of: "--language") {
+        guard index + 1 < arguments.count else { fail(usage) }
+        language = arguments[index + 1] == "auto" ? nil : arguments[index + 1]
+        arguments.removeSubrange(index...(index + 1))
+    }
     let model = model(named: arguments.first)
     let files = arguments.dropFirst().map { URL(fileURLWithPath: $0) }
     guard !files.isEmpty else { fail(usage) }
     guard store.isDownloaded(model) else { fail("\(model.id) isn't downloaded. Run: wisprfaux-bench download \(model.id)") }
 
-    let transcriber = WhisperKitTranscriber(model: model, store: store)
-    print("Model \(model.id)")
+    let transcriber = WhisperKitTranscriber(model: model, store: store, language: language)
+    print("Model \(model.id), language \(language ?? "detected")")
     do {
         let loadTime = try await transcriber.load()
         print("  load: \(seconds(loadTime)) s")
@@ -142,7 +149,7 @@ case "run":
         guard let last else { continue }
         let warm = times.dropFirst().min() ?? times[0]
         print("    first run: \(seconds(times[0])) s · best of the rest: \(seconds(warm)) s · \(String(format: "%.2f", warm / last.audioDuration))× real time")
-        print("    text: \(last.text)")
+        print("    text (\(last.language ?? "?")): \(last.text)")
         if let reference {
             let wer = WordErrorRate.compute(reference: reference, hypothesis: last.text)
             let words = reference.split(whereSeparator: \.isWhitespace).count

@@ -20,7 +20,7 @@ public struct CleanupOutcome: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
         /// The model's version was used.
         case cleaned
-        /// No sign of a stumble, so the model wasn't asked.
+        /// No sign of a stumble, a list or an email, so the model wasn't asked.
         case skipped
         /// The model's reply failed the guard; the transcript was kept.
         case rejected(CleanupGuard.Reason)
@@ -38,13 +38,14 @@ public struct CleanupOutcome: Sendable, Equatable {
     public var changedText: Bool { kind == .cleaned }
 }
 
-/// Runs a transcript through an engine, but only when it shows a stumble, within a time
-/// limit, and through `CleanupGuard`. Whatever goes wrong, the transcript comes back
-/// unchanged, so cleanup can never lose or garble a dictation.
+/// Runs a transcript through an engine, but only when it shows a stumble or reads as a
+/// list or an email, within a time limit, and through `CleanupGuard`. Whatever goes
+/// wrong, the transcript comes back unchanged, so cleanup can never lose or garble a
+/// dictation.
 public struct TranscriptCleaner: Sendable {
     public let engine: any CleanupEngine
     public var timeout: Duration
-    /// Ask the model even when no stumble is spotted (for benchmarks).
+    /// Ask the model even when `shouldClean` says no (for benchmarks).
     public var alwaysRun: Bool
 
     public init(engine: any CleanupEngine, timeout: Duration = .seconds(3), alwaysRun: Bool = false) {
@@ -59,19 +60,21 @@ public struct TranscriptCleaner: Sendable {
             CleanupOutcome(text: text, kind: kind, duration: .now - started)
         }
 
-        guard alwaysRun || DisfluencyCues.suggestCleanup(transcript) else {
+        guard alwaysRun || Self.shouldClean(transcript) else {
             return outcome(transcript, .skipped)
         }
-        // Cleanup only shortens text: room for the whole transcript, plus punctuation.
+        // Cleanup only shortens text: room for the whole transcript, plus punctuation,
+        // line breaks and list numbers.
         let maxTokens = WordCount.of(transcript) * 2 + 32
+        let prompt = CleanupPrompt(for: transcript)
 
         let reply: String?
         do {
             reply = try await withThrowingTaskGroup(of: String?.self) { group in
                 group.addTask {
                     try await engine.complete(
-                        instructions: CleanupPrompt.instructions,
-                        examples: CleanupPrompt.examples,
+                        instructions: prompt.instructions,
+                        examples: prompt.examples,
                         text: transcript,
                         maxTokens: maxTokens
                     )
@@ -91,10 +94,19 @@ public struct TranscriptCleaner: Sendable {
         guard let reply else { return outcome(transcript, .timedOut) }
         switch CleanupGuard.review(original: transcript, reply: reply) {
         case .accept(let cleaned):
-            return outcome(cleaned, .cleaned)
+            let laidOut = FormattingCues.looksLikeEmail(transcript) ? EmailLayout.apply(to: cleaned) : cleaned
+            return outcome(laidOut, .cleaned)
         case .reject(let reason):
             return outcome(transcript, .rejected(reason))
         }
+    }
+}
+
+extension TranscriptCleaner {
+    /// Whether a transcript is worth sending to the model: it shows a stumble, or reads as
+    /// a list or an email that could be laid out.
+    public static func shouldClean(_ transcript: String) -> Bool {
+        DisfluencyCues.suggestCleanup(transcript) || FormattingCues.suggestFormatting(transcript)
     }
 }
 

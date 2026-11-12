@@ -133,22 +133,30 @@ Not done yet:
 
 ## Cleaning up stumbles
 
-Whisper writes down exactly what was said, stumbles included. **Settings → Clean up stumbles** fixes them before pasting: fillers ("um", "uh"), repeated words, broken-off phrases, and self-corrections ("Tuesday, no wait, Wednesday" → "Wednesday"; "send it to Mark, I mean Mike" → "send it to Mike").
+Whisper writes down exactly what was said, stumbles included. **Settings → Clean up stumbles** fixes them before pasting: fillers ("um", "uh"), repeated words, broken-off phrases, and self-corrections ("Tuesday, no wait, Wednesday" → "Wednesday"; "send it to Mark, I mean Mike" → "send it to Mike"; "tell them it was terrible, don't say terrible, say it needs revision" → "tell them it needs revision"). It also lays out dictated lists and emails.
 
-- **Only when needed.** A transcript goes to the model only when it shows a stumble: a filler, "I mean", "sorry", "no wait", "wait", "actually", "scratch that", a doubled word, or a dash or ellipsis. Clean dictations are pasted as Whisper wrote them, with no extra delay.
-- **On this Mac** (the default): Qwen3 1.7B (`mlx-community/Qwen3-1.7B-4bit`, 0.98 GB) on the GPU through [MLX](https://github.com/ml-explore/mlx-swift-lm). It lives in `~/Library/Application Support/Wispr Faux/Models/llm`; Settings has a Download button when it's missing. About 0.55 s per cleanup, and nothing leaves the Mac.
-- **Cloud**: any provider with the common chat-completions API. Presets: **GLM-4.7-Flash** from Z.ai (free with an account, about one request per second) and **DeepSeek** (paid, about $0.0001 per cleanup). Paste the API key in Settings; it's stored in the macOS keychain. Only the text of dictations with a stumble is sent; audio never leaves the Mac. Both providers are in China, and free tiers may use requests for training.
-- **Safety.** The model's reply is checked before it's pasted. Cleanup only removes words, so a reply that brings in words that weren't said, gets longer, adds lines or drops almost everything is rejected: that's a model answering a dictated question, following a dictated instruction, or rewording. A reply slower than 3 s (4 s for cloud) or an error also falls back. In every one of those cases the transcript is pasted as spoken. Esc cancels during cleanup too.
+- **Only when needed.** A transcript goes to the model only when it shows a stumble (a filler, "I mean", "sorry", "no wait", "wait", "actually", "scratch that", "don't say", ", make that", a doubled word, or a dash or ellipsis), or reads as a list ("first… second…", "three things") or an email (opens with "Hey", "Hi" or "Dear" and ends with "thanks", "cheers" or similar). Everything else is pasted as Whisper wrote it, with no extra delay.
+- **Lists and emails.** "Here are three things we need for the launch first a landing page second three demo videos and third a press release" comes out as the intro line ending in a colon and a numbered list. An email comes out as "Hey Sarah," then the message, then "Thanks.", with blank lines between. The model numbers lists; Qwen3 1.7B punctuates an email but won't break its lines, so when it leaves one on a single line a small rule does that (only for a greeting with a name, a message of two or more sentences, and a sign-off, so "Hey, can you grab milk? Thanks." stays on one line).
+- **Short prompts.** The rules and examples for lists, emails, "scratch that" and "don't say" are sent only with transcripts that need them, so an ordinary stumble is cleaned as fast as before.
+- **On this Mac** (the default): Qwen3 1.7B (`mlx-community/Qwen3-1.7B-4bit`, 0.98 GB) on the GPU through [MLX](https://github.com/ml-explore/mlx-swift-lm). It lives in `~/Library/Application Support/Wispr Faux/Models/llm`; Settings has a Download button when it's missing. About 0.55 s for a typical stumble and 1 s for a list or an email, and nothing leaves the Mac.
+- **Cloud**: any provider with the common chat-completions API. Presets: **GLM-4.7-Flash** from Z.ai (free with an account, about one request per second) and **DeepSeek** (paid, about $0.0001 per cleanup). Paste the API key in Settings; it's stored in the macOS keychain. Only the text of dictations that need cleanup (a stumble, a list or an email) is sent; audio never leaves the Mac. Both providers are in China, and free tiers may use requests for training.
+- **Safety.** The model's reply is checked before it's pasted. Cleanup only removes words (line breaks and list numbers at the start of a line are layout, not words), so a reply that brings in words that weren't said, gets longer or drops almost everything is rejected: that's a model answering a dictated question, following a dictated instruction, or rewording. A reply slower than 3 s (4 s for cloud) or an error also falls back. In every one of those cases the transcript is pasted as spoken. Esc cancels during cleanup too.
 - **History** keeps the original wording of any dictation that cleanup changed.
 - **Test** in Settings runs a sample stumble through the current engine and shows the result and timing.
+- **Other languages.** With language detection on (see Transcription), Spanish and French dictations go through the same cleanup. The bench checks that they're cleaned without being translated, and the guard would reject a translation anyway. The cues and examples are English, so a Spanish "este" or French "euh" on its own doesn't trigger cleanup, and the model tends to leave such fillers in.
 
-Measured on the M4 Mac mini with `wisprfaux-bench cleanup` (10 stumbles plus 6 traps: a question, a dictated instruction, a prompt injection, a "sorry" and an "actually" that aren't corrections, and a long clean paragraph). A case passes when the pasted text is within 15% of the expected text:
+Measured on the M4 Mac mini with `wisprfaux-bench cleanup` (25 cases: 10 stumbles; 3 longer corrections ("make that 60k, no sorry, 55,000", a whole sentence taken back with "scratch that", and "don't say X, say Y"); a list and an email to lay out; 8 traps: a question, a dictated instruction, a prompt injection, a "sorry" and an "actually" that aren't corrections, a long clean paragraph, and a "First of all…" and a quick "Hey… thanks" text that must stay on one line; and a Spanish and a French stumble). A case passes when the pasted text is within 15% word error of the expected text and has the same layout (lines and list numbers):
 
-| Model (on this Mac) | Passed | Per cleanup | Download |
-|---|---|---|---|
-| LFM2.5 1.2B | 10/16 (once flipped a meaning) | 0.40 s | 0.64 GB |
-| **Qwen3 1.7B** | **14/16** | **0.55 s** | 0.98 GB |
-| Qwen3 4B Instruct 2507 | 14/16 | 1.26 s | 2.28 GB |
+| Model (on this Mac) | Passed | Typical stumble | List or email | Download |
+|---|---|---|---|---|
+| **Qwen3 1.7B** | **22/25** | **0.55 s** | 1.0 s | 0.98 GB |
+| Qwen3 4B Instruct 2507 | 21/25 | 1.2 s | 2.3 s | 2.28 GB |
+
+Qwen3 1.7B's misses: it returned "Okay so um basically…" unchanged; it merged a "scratch that" into the question it took back ("Can we meet Thursday at 10:30 AM instead." rather than "I have a conflict, let's do Thursday at 10:30 AM instead."); and it wrote the haiku it was asked for, which the guard rejected, so the dictation was pasted as spoken, "Uh" included. On the 23 cases before the Spanish and French ones were added, the list, email and correction work took it from 17/23 to 20/23.
+
+Qwen3 4B gets three of those right: the "scratch that", the "um basically", and the email's line breaks without help. But it half-applies the "45 thousand… make that 60k, no sorry, 55,000" chain ("Let's allocate 45 thousand dollars to Q3 marketing, actually wait, make that 55,000 dollars total."), which changes the meaning. It also reorders "set dictate up" to "set up dictate", and its reply to the Spanish stumble was rejected for adding words, so that dictation was pasted as spoken. It's about twice as slow, and its 2.3 s for a list or an email is close to the app's 3 s limit, past which a dictation is pasted as spoken. So 1.7B stays the default.
+
+On the first 16 cases (before lists, emails and the longer corrections were added): LFM2.5 1.2B passed 10/16 at 0.40 s per cleanup (and once flipped a meaning); Qwen3 4B and Qwen3 1.7B both passed 14/16.
 
 Every model wrote a haiku when told to "write a haiku", and the guard rejected all of them. `mlx-swift-lm` is pinned to 2.30.6, the last release that builds with Swift 6.0 (Xcode 16); newer releases support newer models (Qwen3.5, Gemma 4) but need Xcode 26.
 
@@ -209,6 +217,7 @@ Wispr Faux transcribes with [WhisperKit](https://github.com/argmaxinc/WhisperKit
 - **Getting it:** if the model isn't there, the menu shows a **Download** button. That download, and `wisprfaux-bench download`, are the only things in Wispr Faux that use the network. Loading and transcribing work entirely from those files, and a model only counts as downloaded once its tokenizer is there too (otherwise WhisperKit would fetch it at load time).
 - **Status:** the menu shows the model's state while it's loading, downloading or missing; Debug builds show the last dictation's timings in the Debug menu. The log records timings and length, never the words.
 - **Another model:** `defaults write com.example.wisprfaux transcription.model openai_whisper-small.en`, then relaunch. `defaults delete com.example.wisprfaux transcription.model` goes back to the default.
+- **Language:** English by default. **Settings → Transcription → Language → Detect automatically** lets Whisper pick the language of each dictation, so you can switch between English, Spanish and French from one dictation to the next; it costs about 0.02 s. Whisper picks one language per 30 s, so a dictation that switches language midway is transcribed as its main language (the rest may come out translated). To always use another language: `defaults write com.example.wisprfaux transcription.language es` (`auto` is Detect automatically). English-only models such as small.en always transcribe English.
 
 Measured on the M4 Mac mini (16 GB):
 
@@ -246,9 +255,9 @@ Whisper models:
 .build-xcode/Build/Products/Release/wisprfaux-bench run turbo_632MB clip1.wav clip2.aiff --runs 3
 ```
 
-Any audio file works. A `.txt` file with the same name next to it is used as the reference transcript, and the run reports the word error rate. `say -o clip.aiff -f clip.txt` makes test clips with known text.
+Any audio file works. A `.txt` file with the same name next to it is used as the reference transcript, and the run reports the word error rate. `say -o clip.aiff -f clip.txt` makes test clips with known text (`say -v '?'` lists voices, including Spanish and French ones). Runs transcribe English, like the app's default; add `--language auto` to detect the language, or `--language es` to set one. Each transcript is printed with its language.
 
-Cleanup engines (16 built-in cases; `cleanup-models` lists the choices):
+Cleanup engines (25 built-in cases; `cleanup-models` lists the choices):
 
 ```bash
 .build-xcode/Build/Products/Release/wisprfaux-bench cleanup-download qwen3-1.7b

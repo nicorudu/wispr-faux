@@ -58,6 +58,30 @@ struct WhisperKitTranscriberTests {
         #expect(options.chunkingStrategy == nil)
     }
 
+    @Test func detectsTheLanguageWhenNoneIsSet() async {
+        let transcriber = WhisperKitTranscriber(model: .largeV3TurboCompressed, language: nil)
+        let options = await transcriber.decodingOptions(sampleCount: 16_000 * 5)
+        #expect(options.language == nil)
+        #expect(options.detectLanguage)
+        #expect(options.usePrefillPrompt)
+    }
+
+    @Test func switchesLanguageWithoutReloading() async {
+        let transcriber = WhisperKitTranscriber(model: .largeV3TurboCompressed)
+        await transcriber.setLanguage("es")
+        let options = await transcriber.decodingOptions(sampleCount: 16_000 * 5)
+        #expect(options.language == "es")
+        #expect(!options.detectLanguage)
+    }
+
+    /// An English-only model can't detect or transcribe anything else.
+    @Test func englishOnlyModelsStayEnglish() async {
+        let transcriber = WhisperKitTranscriber(model: .smallEnglish, language: nil)
+        let options = await transcriber.decodingOptions(sampleCount: 16_000 * 5)
+        #expect(options.language == "en")
+        #expect(!options.detectLanguage)
+    }
+
     @Test func splitsLongRecordingsAtPauses() async {
         let transcriber = WhisperKitTranscriber(model: .smallEnglish)
         #expect(await transcriber.decodingOptions(sampleCount: 16_000 * 30).chunkingStrategy == nil)

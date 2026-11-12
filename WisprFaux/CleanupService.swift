@@ -4,8 +4,9 @@ import Observation
 import os
 
 /// Fixes stumbles in transcripts ("um", "Tuesday, no wait, Wednesday", "Mark, I mean
-/// Mike") with a small model on this Mac or a cloud model the user picks. Only runs when
-/// a transcript shows a stumble, and any failure leaves the transcript as spoken.
+/// Mike") and lays out lists and emails, with a small model on this Mac or a cloud model
+/// the user picks. Only runs when a transcript shows a stumble or reads as a list or an
+/// email, and any failure leaves the transcript as spoken.
 @MainActor
 @Observable
 final class CleanupService {
@@ -200,7 +201,7 @@ final class CleanupService {
             case .failed(let message): message
             }
         case .cloud:
-            return hasCloudKey ? "\(provider.displayName). Dictated text with stumbles is sent to it" : "Add a \(provider.displayName) API key"
+            return hasCloudKey ? "\(provider.displayName). Dictated text that needs cleanup is sent to it" : "Add a \(provider.displayName) API key"
         }
     }
 

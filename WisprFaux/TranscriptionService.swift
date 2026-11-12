@@ -28,6 +28,8 @@ final class TranscriptionService {
 
     let store = ModelStore.standard
     private(set) var model: WhisperModel
+    /// The spoken language: "en", `detectLanguage`, or another Whisper language code.
+    private(set) var language: String
     private(set) var status: ModelStatus
     private(set) var isTranscribing = false
 
@@ -38,12 +40,36 @@ final class TranscriptionService {
     static let modelDefaultsKey = "transcription.model"
     static let defaultModel = WhisperModel.largeV3TurboCompressed
 
+    /// Set in Settings. Any Whisper language code works too, e.g.
+    /// `defaults write com.example.wisprfaux transcription.language es`.
+    static let languageDefaultsKey = "transcription.language"
+    /// Let Whisper detect the language of each dictation.
+    static let detectLanguage = "auto"
+
     init() {
         let saved = UserDefaults.standard.string(forKey: Self.modelDefaultsKey).flatMap(WhisperModel.named)
         let model = saved ?? Self.defaultModel
         self.model = model
-        transcriber = WhisperKitTranscriber(model: model, store: store)
+        let language = UserDefaults.standard.string(forKey: Self.languageDefaultsKey) ?? "en"
+        self.language = language
+        transcriber = WhisperKitTranscriber(model: model, store: store, language: Self.whisperLanguage(for: language))
         status = store.isDownloaded(model) ? .loading : .notDownloaded
+    }
+
+    /// Takes effect from the next dictation; the model stays loaded.
+    func setLanguage(_ newLanguage: String) {
+        guard newLanguage != language else { return }
+        language = newLanguage
+        UserDefaults.standard.set(newLanguage, forKey: Self.languageDefaultsKey)
+        let transcriber = transcriber
+        let whisperLanguage = Self.whisperLanguage(for: newLanguage)
+        Task { await transcriber.setLanguage(whisperLanguage) }
+        log.notice("Language: \(newLanguage, privacy: .public)")
+    }
+
+    /// What Whisper is told: a language code, or nil to detect it.
+    private static func whisperLanguage(for setting: String) -> String? {
+        setting == detectLanguage ? nil : setting
     }
 
     /// Loads the model from disk if it's there. Called at launch so the first dictation
@@ -115,7 +141,8 @@ final class TranscriptionService {
                 in \(Self.ms(result.processingDuration), privacy: .public) ms \
                 (\(String(format: "%.2f", transcription.realTimeFactor), privacy: .public)× real time); \
                 release to text \(Self.ms(result.releaseToText), privacy: .public) ms; \
-                \(result.text.count, privacy: .public) characters, model \(self.model.id, privacy: .public)
+                \(result.text.count, privacy: .public) characters, language \(transcription.language ?? "?", privacy: .public), \
+                model \(self.model.id, privacy: .public)
                 """)
             return result
         } catch {
@@ -147,6 +174,16 @@ final class TranscriptionService {
 
     var isReady: Bool {
         if case .ready = status { true } else { false }
+    }
+
+    /// The choices in Settings: English and Detect, plus a language set with `defaults write`.
+    var languageChoices: [String] {
+        let standard = ["en", Self.detectLanguage]
+        return standard.contains(language) ? standard : standard + [language]
+    }
+
+    static func languageName(_ code: String) -> String {
+        code == detectLanguage ? "Detect automatically" : Locale.current.localizedString(forLanguageCode: code) ?? code
     }
 
     // MARK: - Formatting
